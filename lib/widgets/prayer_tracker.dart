@@ -2,7 +2,18 @@ import 'package:flutter/material.dart';
 import 'prayer_indicator.dart';
 
 class PrayerTracker extends StatelessWidget {
-  const PrayerTracker({super.key});
+  final Map<String, bool> prayerStates;
+  final Function(String) onToggle;
+  final bool Function(String) isPrayerTimeReached;
+  final bool Function(String) isPrayerMissed;
+
+  const PrayerTracker({
+    super.key,
+    required this.prayerStates,
+    required this.onToggle,
+    required this.isPrayerTimeReached,
+    required this.isPrayerMissed,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -19,16 +30,26 @@ class PrayerTracker extends StatelessWidget {
           ),
         ],
       ),
-      child: const Row(
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          PrayerIndicator(label: 'Fajr', isCompleted: true),
-          PrayerIndicator(label: 'Dzuhur', isCompleted: true),
-          PrayerIndicator(label: 'Ashar', isCompleted: true),
-          PrayerIndicator(label: 'Maghrib', isCompleted: true),
-          PrayerIndicator(label: 'Isha', isCompleted: false),
+          _buildIndicator('Fajr'),
+          _buildIndicator('Dzuhur'),
+          _buildIndicator('Ashar'),
+          _buildIndicator('Maghrib'),
+          _buildIndicator('Isha'),
         ],
       ),
+    );
+  }
+
+  Widget _buildIndicator(String label) {
+    return PrayerIndicator(
+      label: label,
+      isCompleted: prayerStates[label] ?? false,
+      isClickable: isPrayerTimeReached(label),
+      isMissed: isPrayerMissed(label),
+      onTap: () => onToggle(label),
     );
   }
 }

@@ -3,7 +3,22 @@ import 'package:google_fonts/google_fonts.dart';
 import 'streak_badge.dart';
 
 class GreetingSection extends StatelessWidget {
-  const GreetingSection({super.key});
+  final String userName;
+  final List<String> missedPrayers;
+  final int streakCount;
+  final bool isFrozen;
+  final Function(String) onQadaComplete;
+  final VoidCallback onToggleFreeze;
+
+  const GreetingSection({
+    super.key,
+    required this.userName,
+    required this.missedPrayers,
+    required this.streakCount,
+    required this.isFrozen,
+    required this.onQadaComplete,
+    required this.onToggleFreeze,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +40,7 @@ class GreetingSection extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                "Raffi Indra",
+                userName,
                 style: GoogleFonts.dmSerifDisplay(
                   color: const Color(0xFF1F6F5B),
                   fontSize: 28,
@@ -36,7 +51,13 @@ class GreetingSection extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        const StreakBadge(),
+        StreakBadge(
+          missedPrayers: missedPrayers,
+          streakCount: streakCount,
+          isFrozen: isFrozen,
+          onQadaComplete: onQadaComplete,
+          onToggleFreeze: onToggleFreeze,
+        ),
       ],
     );
   }

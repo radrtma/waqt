@@ -5,7 +5,36 @@ import 'date_information.dart';
 import 'prayer_tracker.dart';
 
 class MainDashboard extends StatelessWidget {
-  const MainDashboard({super.key});
+  final Map<String, bool> prayerStates;
+  final Function(String) onToggle;
+  final Map<String, dynamic> timings;
+  final String userName;
+  final Map<String, dynamic> dateInfo;
+  final DateTime currentTime;
+  final bool Function(String) isPrayerTimeReached;
+  final bool Function(String) isPrayerMissed;
+  final List<String> missedPrayers;
+  final int streakCount;
+  final bool isFrozen;
+  final Function(String) onQadaComplete;
+  final VoidCallback onToggleFreeze;
+
+  const MainDashboard({
+    super.key,
+    required this.userName,
+    required this.prayerStates,
+    required this.onToggle,
+    required this.timings,
+    required this.dateInfo,
+    required this.currentTime,
+    required this.isPrayerTimeReached,
+    required this.isPrayerMissed,
+    required this.missedPrayers,
+    required this.streakCount,
+    required this.isFrozen,
+    required this.onQadaComplete,
+    required this.onToggleFreeze,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -24,21 +53,70 @@ class MainDashboard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const GreetingSection(),
+            GreetingSection(
+              userName: userName,
+              missedPrayers: missedPrayers,
+              streakCount: streakCount,
+              isFrozen: isFrozen,
+              onQadaComplete: onQadaComplete,
+              onToggleFreeze: onToggleFreeze,
+            ),
             const SizedBox(height: 32),
-            const PrayerCard(
-              prayerName: 'Maghrib',
-              prayerTime: '18:12',
-              nextPrayerInfo: 'Next Prayer (Isha) In',
+            const SizedBox(height: 32),
+            PrayerCard(
+              prayerName: _getNextPrayerName(),
+              prayerTime: timings[_getNextPrayerName()] ?? '--:--',
+              nextPrayerInfo: 'Next Prayer (${_getNextPrayerName()}) In',
+              nextPrayerCountdown: _getCountdown(_getNextPrayerName()),
             ),
             const SizedBox(height: 20),
-            const DateInformation(),
+            DateInformation(
+              gDate: dateInfo['gregorian']['date'] ?? '',
+              hDate: '${dateInfo['hijri']['day']} ${dateInfo['hijri']['month']['en']} ${dateInfo['hijri']['year']} H',
+            ),
             const SizedBox(height: 24),
-            const PrayerTracker(),
+            PrayerTracker(
+              prayerStates: prayerStates,
+              onToggle: onToggle,
+              isPrayerTimeReached: isPrayerTimeReached,
+              isPrayerMissed: isPrayerMissed,
+            ),
             const SizedBox(height: 40),
           ],
         ),
       ),
     );
+  }
+
+  String _getCountdown(String prayerName) {
+    if (timings[prayerName] == null) return '--:--:--';
+    final parts = timings[prayerName].split(':');
+    final prayerTime = DateTime(
+      currentTime.year,
+      currentTime.month,
+      currentTime.day,
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+    );
+
+    var diff = prayerTime.difference(currentTime);
+    if (diff.isNegative) {
+      // Jika sudah lewat, mungkin besok (untuk Fajr)
+      diff = prayerTime.add(const Duration(days: 1)).difference(currentTime);
+    }
+
+    final hours = diff.inHours;
+    final minutes = diff.inMinutes % 60;
+    final seconds = diff.inSeconds % 60;
+
+    return '${hours.toString().padLeft(2, '0')} : ${minutes.toString().padLeft(2, '0')} : ${seconds.toString().padLeft(2, '0')}';
+  }
+
+  String _getNextPrayerName() {
+    final prayerNames = ['Fajr', 'Dzuhur', 'Ashar', 'Maghrib', 'Isha'];
+    for (var name in prayerNames) {
+      if (!isPrayerTimeReached(name)) return name;
+    }
+    return 'Fajr'; // Cycle back to Fajr if all prayers today are finished
   }
 }

@@ -1,26 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'hover_effect.dart';
 
 class PrayerCard extends StatelessWidget {
   final String prayerName;
   final String prayerTime;
   final String nextPrayerInfo;
+  final String? nextPrayerCountdown;
 
   const PrayerCard({
     super.key,
     required this.prayerName,
     required this.prayerTime,
     required this.nextPrayerInfo,
+    this.nextPrayerCountdown,
   });
 
   @override
   Widget build(BuildContext context) {
-    return HoverEffect(
-      onTap: () {
-        // Optional action
-      },
-      child: Container(
+    return Container(
       width: double.infinity,
       height: 200,
       decoration: BoxDecoration(
@@ -90,7 +87,7 @@ class PrayerCard extends StatelessWidget {
                   ],
                 ),
                 Text(
-                  '$prayerTime PM',
+                  prayerTime,
                   style: GoogleFonts.inter(
                     color: const Color(0xFFF5E9DA),
                     fontSize: 30,
@@ -99,25 +96,28 @@ class PrayerCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Next Prayer (Isha) In',
+                  nextPrayerInfo,
                   style: GoogleFonts.inter(
-                    color: const Color(0xFFF5E9DA).withOpacity(0.7),
+                    color: Colors.white.withOpacity(0.8),
                     fontSize: 12,
                   ),
                 ),
-                Text(
-                  '1h 10m',
-                  style: GoogleFonts.inter(
-                    color: const Color(0xFFF2C94C), // Gold for the countdown
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
+                if (nextPrayerCountdown != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    nextPrayerCountdown!,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFFF2C94C), // Gold for the countdown
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
         ],
       ),
-    ));
+    );
   }
 }

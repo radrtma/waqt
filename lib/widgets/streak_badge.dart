@@ -1,15 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'hover_effect.dart';
+import '../screens/streak_screen.dart';
 
 class StreakBadge extends StatelessWidget {
-  const StreakBadge({super.key});
+  final List<String> missedPrayers;
+  final int streakCount;
+  final bool isFrozen;
+  final Function(String) onQadaComplete;
+  final VoidCallback onToggleFreeze;
+
+  const StreakBadge({
+    super.key,
+    required this.missedPrayers,
+    required this.streakCount,
+    required this.isFrozen,
+    required this.onQadaComplete,
+    required this.onToggleFreeze,
+  });
 
   @override
   Widget build(BuildContext context) {
     return HoverEffect(
       onTap: () {
-        // Optional: add tap functionality
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => StreakScreen(
+              missedPrayers: missedPrayers,
+              streakCount: streakCount,
+              isFrozen: isFrozen,
+              onQadaComplete: onQadaComplete,
+              onToggleFreeze: onToggleFreeze,
+            ),
+          ),
+        );
       },
       child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -32,16 +57,16 @@ class StreakBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Image.asset(
-            'assets/images/icon_streak.png',
+            isFrozen ? 'assets/images/icon_streak_freeze.png' : 'assets/images/icon_streak.png',
             width: 24,
             height: 24,
             fit: BoxFit.contain,
           ),
           const SizedBox(width: 8),
           Text(
-            '7x',
+            '${streakCount}x',
             style: GoogleFonts.inter(
-              color: const Color(0xFF1F6F5B),
+              color: isFrozen ? Colors.blue.shade700 : const Color(0xFF1F6F5B),
               fontWeight: FontWeight.bold,
               fontSize: 16,
             ),
