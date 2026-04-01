@@ -71,10 +71,10 @@ class _HomeContentState extends State<HomeContent> {
         _timings = data['timings'];
         _dateInfo = data['date'];
         _isLoading = false;
-        if (_timings != null) {
-          NotificationService().schedulePrayerNotifications(_timings!);
-        }
       });
+      if (_timings != null) {
+        await NotificationService().schedulePrayerNotifications(_timings!);
+      }
     } catch (e) {
       setState(() {
         _errorMessage = e.toString();
@@ -101,14 +101,17 @@ class _HomeContentState extends State<HomeContent> {
   }
 
   bool _isPrayerMissed(String prayerName) {
-    if (_timings == null || widget.prayerStates[prayerName] == true || widget.qadaCompleted.contains(prayerName)) return false;
+    if (_timings == null ||
+        widget.prayerStates[prayerName] == true ||
+        widget.qadaCompleted.contains(prayerName))
+      return false;
 
     final prayerNames = ['Fajr', 'Dzuhur', 'Ashar', 'Maghrib', 'Isha'];
     int currentIndex = prayerNames.indexOf(prayerName);
-    
+
     String nextPrayerName;
     bool isNextDay = false;
-    
+
     if (currentIndex < prayerNames.length - 1) {
       nextPrayerName = prayerNames[currentIndex + 1];
     } else {
@@ -179,14 +182,16 @@ class _HomeContentState extends State<HomeContent> {
     }
 
     if (_errorMessage != null) {
-      return Center(
-        child: Text('Error: $_errorMessage'),
-      );
+      return Center(child: Text('Error: $_errorMessage'));
     }
 
-    final missedPrayers = ['Fajr', 'Dzuhur', 'Ashar', 'Maghrib', 'Isha']
-        .where((p) => _isPrayerMissed(p))
-        .toList();
+    final missedPrayers = [
+      'Fajr',
+      'Dzuhur',
+      'Ashar',
+      'Maghrib',
+      'Isha',
+    ].where((p) => _isPrayerMissed(p)).toList();
 
     return SingleChildScrollView(
       child: Column(

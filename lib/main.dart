@@ -47,7 +47,8 @@ class _HomeScreenState extends State<HomeScreen> {
   // Global State
   int _streakCount = 7;
   bool _isFrozen = false;
-  bool _hasMissedToday = false; // Tracks if any prayer was missed today (real-time)
+  bool _hasMissedToday =
+      false; // Tracks if any prayer was missed today (real-time)
   String _userName = 'User';
   Map<String, bool> _prayerStates = {
     'Fajr': false,
@@ -64,13 +65,17 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _initializeMockHistory();
-    NotificationService().init();
+    _initNotifications();
     // Check for day change every minute
     Timer.periodic(const Duration(minutes: 1), (timer) {
       if (mounted) {
         _checkDayChange();
       }
     });
+  }
+
+  Future<void> _initNotifications() async {
+    await NotificationService().init();
   }
 
   void _initializeMockHistory() {
@@ -96,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
       bool hasUncompletedPrayers = _prayerStates.entries.any((e) => !e.value);
       if (!hasUncompletedPrayers && _isFrozen) {
         _isFrozen = false;
-        _hasMissedToday = false; 
+        _hasMissedToday = false;
       }
     });
   }
@@ -114,13 +119,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onQadaComplete(String label) {
     setState(() {
       _qadaCompleted.add(label);
-      _prayerStates[label] = true; // Mark as done so streak doesn't break at day change
+      _prayerStates[label] =
+          true; // Mark as done so streak doesn't break at day change
 
       // If all prayers are now completed, immediately unfreeze the streak
       bool hasUncompletedPrayers = _prayerStates.entries.any((e) => !e.value);
       if (!hasUncompletedPrayers && _isFrozen) {
         _isFrozen = false;
-        _hasMissedToday = false; // Reset daily tracking so we can detect future misses today if needed
+        _hasMissedToday =
+            false; // Reset daily tracking so we can detect future misses today if needed
       }
     });
   }
@@ -140,29 +147,32 @@ class _HomeScreenState extends State<HomeScreen> {
   void _checkDayChange() {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     if (today != _lastUpdateDate) {
-      // Check if there are still uncompleted prayers (not done & not qada'd)
-      bool hasUncompletedPrayers = _prayerStates.entries.any(
-        (e) => !e.value, // any prayer still false = not done
-      );
-      
-      if (_isFrozen && hasUncompletedPrayers) {
-        // Was frozen (had missed prayers) AND qada was NOT completed → RESET streak
-        _resetStreak();
-        _isFrozen = false;
-        NotificationService().showStreakResetAlert();
-      } else if (_isFrozen && !hasUncompletedPrayers) {
-        // Was frozen but all qada completed → unfreeze, streak preserved (no increment)
-        _isFrozen = false;
-      } else if (!_isFrozen && !hasUncompletedPrayers) {
-        // Normal day, all prayers done → increment streak
-        _streakCount++;
+      bool isMissed = _prayerStates.values.any((done) => !done);
+
+      if (isMissed) {
+        if (_isFrozen) {
+          // Jika sudah nunggak sebelumnya (frozen) dan ganti hari masih tertinggal -> Reset
+          _resetStreak();
+          _isFrozen = false;
+          NotificationService().showStreakResetAlert();
+        } else {
+          // Jika baru pertama kali tertinggal -> Freeze dulu (Grace period)
+          _isFrozen = true;
+          _prayerStates.forEach((prayer, done) {
+            if (!done) NotificationService().showQadaAlert(prayer);
+          });
+          // streakCount tetap (tidak bertambah, tidak reset)
+        }
+      } else {
+        // Jika semua sholat selesai (normal atau qada)
+        if (!_isFrozen) {
+          _streakCount++; // Hanya bertambah jika tertib sepenuhnya
+        }
+        _isFrozen = false; // Cairkan jika sebelumnya frozen
       }
-      // Note: !_isFrozen && hasUncompletedPrayers shouldn't happen because
-      // _onPrayerMissed() sets _isFrozen = true in real-time
-      
       // Save to history before reset
       _historyData[_lastUpdateDate] = Map.from(_prayerStates);
-      
+
       _prayerStates = {
         'Fajr': false,
         'Dzuhur': false,
@@ -192,18 +202,12 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       const PrayScreen(),
       HistoryScreen(historyData: _historyData),
-      ProfileScreen(
-        userName: _userName,
-        onNameChanged: _updateUserName,
-      ),
+      ProfileScreen(userName: _userName, onNameChanged: _updateUserName),
     ];
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: screens,
-      ),
+      body: IndexedStack(index: _currentIndex, children: screens),
       bottomNavigationBar: CustomBottomNavbar(
         currentIndex: _currentIndex,
         onTap: (index) {
