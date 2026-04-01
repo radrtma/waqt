@@ -223,12 +223,19 @@ class _PrayScreenState extends State<PrayScreen> {
       decoration: BoxDecoration(
         color: isActive ? const Color(0xFF1F6F5B) : Colors.white,
         borderRadius: BorderRadius.circular(24),
+        border: isActive ? Border.all(color: const Color(0xFFF2C94C).withValues(alpha: 0.2), width: 1) : null,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
+          if (isActive)
+            BoxShadow(
+              color: const Color(0xFFF2C94C).withValues(alpha: 0.15),
+              blurRadius: 30,
+              offset: const Offset(0, 0),
+            ),
         ],
       ),
       child: Row(
@@ -236,13 +243,14 @@ class _PrayScreenState extends State<PrayScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isActive ? Colors.white.withOpacity(0.2) : const Color(0xFFF5E9DA),
+              color: isActive ? const Color(0xFFF2C94C).withValues(alpha: 0.15) : const Color(0xFFF5E9DA),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
               icon,
-              color: isActive ? Colors.white : const Color(0xFF1F6F5B),
+              color: isActive ? const Color(0xFFF2C94C) : const Color(0xFF1F6F5B),
               size: 24,
+              shadows: isActive ? [Shadow(color: const Color(0xFFF2C94C).withValues(alpha: 0.3), blurRadius: 10)] : null,
             ),
           ),
           const SizedBox(width: 16),
@@ -255,7 +263,8 @@ class _PrayScreenState extends State<PrayScreen> {
                   style: GoogleFonts.inter(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
-                    color: isActive ? Colors.white : const Color(0xFF1F6F5B),
+                    color: isActive ? const Color(0xFFF2C94C) : const Color(0xFF1F6F5B),
+                    shadows: isActive ? [Shadow(color: const Color(0xFFF2C94C).withValues(alpha: 0.2), blurRadius: 8)] : null,
                   ),
                 ),
                 if (isActive)
@@ -263,7 +272,7 @@ class _PrayScreenState extends State<PrayScreen> {
                     'Active Now',
                     style: GoogleFonts.inter(
                       fontSize: 12,
-                      color: Colors.white.withOpacity(0.8),
+                      color: const Color(0xFFF2C94C).withValues(alpha: 0.8),
                     ),
                   ),
               ],
@@ -274,7 +283,8 @@ class _PrayScreenState extends State<PrayScreen> {
             style: GoogleFonts.inter(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: isActive ? Colors.white : const Color(0xFF1F6F5B),
+              color: isActive ? const Color(0xFFF2C94C) : const Color(0xFF1F6F5B),
+              shadows: isActive ? [Shadow(color: const Color(0xFFF2C94C).withValues(alpha: 0.2), blurRadius: 8)] : null,
             ),
           ),
         ],

@@ -13,7 +13,6 @@ class HomeContent extends StatefulWidget {
   final String userName;
   final Set<String> qadaCompleted;
   final Function(String) onQadaComplete;
-  final VoidCallback onToggleFreeze;
 
   const HomeContent({
     super.key,
@@ -24,7 +23,6 @@ class HomeContent extends StatefulWidget {
     required this.isFrozen,
     required this.qadaCompleted,
     required this.onQadaComplete,
-    required this.onToggleFreeze,
   });
 
   @override
@@ -197,7 +195,6 @@ class _HomeContentState extends State<HomeContent> {
                 streakCount: widget.streakCount,
                 isFrozen: widget.isFrozen,
                 onQadaComplete: widget.onQadaComplete,
-                onToggleFreeze: widget.onToggleFreeze,
               ),
             ],
           ),

@@ -8,13 +8,13 @@ class HoverEffect extends StatefulWidget {
   final HitTestBehavior behavior;
 
   const HoverEffect({
-    Key? key,
+    super.key,
     required this.child,
     this.scale = 1.02,
     this.transform,
     this.onTap,
     this.behavior = HitTestBehavior.opaque,
-  }) : super(key: key);
+  });
 
   @override
   State<HoverEffect> createState() => _HoverEffectState();

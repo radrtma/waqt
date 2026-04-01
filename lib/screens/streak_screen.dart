@@ -7,7 +7,6 @@ class StreakScreen extends StatefulWidget {
   final int streakCount;
   final bool isFrozen;
   final Function(String) onQadaComplete;
-  final VoidCallback onToggleFreeze;
 
   const StreakScreen({
     super.key,
@@ -15,7 +14,6 @@ class StreakScreen extends StatefulWidget {
     required this.streakCount,
     required this.isFrozen,
     required this.onQadaComplete,
-    required this.onToggleFreeze,
   });
 
   @override
@@ -48,11 +46,16 @@ class _StreakScreenState extends State<StreakScreen> {
     bool isExtinguished = _isExtinguished() && _completedThisSession.length < _currentMissed.length;
     
     String streakIcon = 'assets/images/icon_streak.png';
-    if (widget.isFrozen) streakIcon = 'assets/images/icon_streak_freeze.png';
-    else if (isExtinguished) streakIcon = 'assets/images/icon_streak_off.png';
+    if (widget.isFrozen) {
+      streakIcon = 'assets/images/icon_streak_freeze.png';
+    } else if (isExtinguished) streakIcon = 'assets/images/icon_streak_off.png';
 
-    Color themeColor = isExtinguished ? Colors.grey : const Color(0xFF1F6F5B);
-    if (widget.isFrozen) themeColor = Colors.blue.shade700;
+    Color themeColor = isExtinguished ? Colors.grey : const Color(0xFFF2C94C); // Gold
+    Color heroBg = isExtinguished ? Colors.white : const Color(0xFF1F6F5B); // Dark Green
+    if (widget.isFrozen) {
+      themeColor = Colors.white;
+      heroBg = Colors.blue.shade700;
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5E9DA),
@@ -64,9 +67,9 @@ class _StreakScreenState extends State<StreakScreen> {
             children: [
               _buildHeader(context),
               const SizedBox(height: 32),
-              _buildStreakHeroCard(themeColor, streakIcon, isExtinguished),
+              _buildStreakHeroCard(themeColor, heroBg, streakIcon, isExtinguished),
               const SizedBox(height: 24),
-              _buildStatusCardsRow(),
+              _buildStatusCardsRow(heroBg, themeColor),
               const SizedBox(height: 40),
               _buildQadaSection(),
             ],
@@ -111,19 +114,26 @@ class _StreakScreenState extends State<StreakScreen> {
     );
   }
 
-  Widget _buildStreakHeroCard(Color themeColor, String streakIcon, bool isExtinguished) {
+  Widget _buildStreakHeroCard(Color themeColor, Color bgColor, String streakIcon, bool isExtinguished) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: bgColor,
         borderRadius: BorderRadius.circular(30),
+        border: !isExtinguished ? Border.all(color: themeColor.withValues(alpha: 0.2), width: 1) : null,
         boxShadow: [
           BoxShadow(
-            color: themeColor.withOpacity(0.1),
-            blurRadius: 30,
-            offset: const Offset(0, 15),
+            color: bgColor.withValues(alpha: 0.25),
+            blurRadius: 40,
+            offset: const Offset(0, 20),
           ),
+          if (!isExtinguished && !widget.isFrozen) // Gold Glow
+            BoxShadow(
+              color: themeColor.withValues(alpha: 0.15),
+              blurRadius: 50,
+              offset: const Offset(0, 0),
+            ),
         ],
       ),
       child: Column(
@@ -131,7 +141,7 @@ class _StreakScreenState extends State<StreakScreen> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: themeColor.withOpacity(0.08),
+              color: isExtinguished ? themeColor.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Image.asset(
@@ -152,6 +162,12 @@ class _StreakScreenState extends State<StreakScreen> {
               fontSize: 72,
               fontWeight: FontWeight.bold,
               color: themeColor,
+              shadows: (!isExtinguished) ? [
+                Shadow(
+                  color: themeColor.withValues(alpha: 0.3),
+                  blurRadius: 15,
+                ),
+              ] : null,
             ),
           ),
           Text(
@@ -162,7 +178,7 @@ class _StreakScreenState extends State<StreakScreen> {
               fontSize: 16,
               fontWeight: FontWeight.bold,
               letterSpacing: 2,
-              color: themeColor.withOpacity(0.7),
+              color: isExtinguished ? themeColor.withValues(alpha: 0.7) : Colors.white.withValues(alpha: 0.9),
             ),
           ),
           if (isExtinguished) ...[
@@ -181,31 +197,17 @@ class _StreakScreenState extends State<StreakScreen> {
     );
   }
 
-  Widget _buildStatusCardsRow() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildActionCard(
-            icon: Icons.ac_unit_rounded,
-            title: 'Streak Freeze',
-            subtitle: widget.isFrozen ? 'Active' : 'Available',
-            color: Colors.blue.shade600,
-            onTap: widget.onToggleFreeze,
-            isActive: widget.isFrozen,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _buildActionCard(
-            icon: Icons.history_rounded,
-            title: 'Missed Today',
-            subtitle: '${_currentMissed.length - _completedThisSession.length} Prayers',
-            color: Colors.orange.shade700,
-            onTap: () {},
-            isActive: false,
-          ),
-        ),
-      ],
+  Widget _buildStatusCardsRow(Color heroBg, Color themeColor) {
+    return SizedBox(
+      width: double.infinity,
+      child: _buildActionCard(
+        icon: Icons.history_rounded,
+        title: 'Missed Today',
+        subtitle: '${_currentMissed.length - _completedThisSession.length} Prayers',
+        color: themeColor,
+        onTap: () {},
+        isActive: false,
+      ),
     );
   }
 
@@ -242,7 +244,7 @@ class _StreakScreenState extends State<StreakScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: isActive ? Colors.white.withOpacity(0.2) : color.withOpacity(0.1),
+                color: isActive ? Colors.white.withValues(alpha: 0.2) : color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: isActive ? Colors.white : color, size: 24),
@@ -260,7 +262,7 @@ class _StreakScreenState extends State<StreakScreen> {
               subtitle,
               style: GoogleFonts.inter(
                 fontSize: 12,
-                color: isActive ? Colors.white.withOpacity(0.8) : const Color(0xFF6B6B6B),
+                color: isActive ? Colors.white.withValues(alpha: 0.8) : const Color(0xFF6B6B6B),
               ),
             ),
           ],
@@ -313,9 +315,9 @@ class _StreakScreenState extends State<StreakScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: const Color(0xFF1F6F5B).withValues(alpha: 0.05),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -324,7 +326,7 @@ class _StreakScreenState extends State<StreakScreen> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: isDone ? const Color(0xFF1F6F5B).withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+              color: isDone ? const Color(0xFF1F6F5B).withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -343,7 +345,7 @@ class _StreakScreenState extends State<StreakScreen> {
                   style: GoogleFonts.inter(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
-                    color: const Color(0xFF1F6F5B),
+                    color: const Color(0xFF1F6F5B), // Green standard
                   ),
                 ),
                 Text(
@@ -370,7 +372,7 @@ class _StreakScreenState extends State<StreakScreen> {
                 child: Text(
                   'Qada Now',
                   style: GoogleFonts.inter(
-                    color: Colors.white,
+                    color: const Color(0xFFF2C94C), // Deep Gold Inside Button!
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
@@ -393,13 +395,13 @@ class _StreakScreenState extends State<StreakScreen> {
       ),
       child: Column(
         children: [
-          Icon(Icons.check_circle_outline_rounded, size: 64, color: const Color(0xFF1F6F5B).withOpacity(0.3)),
+          Icon(Icons.check_circle_outline_rounded, size: 64, color: const Color(0xFF1F6F5B).withValues(alpha: 0.3)),
           const SizedBox(height: 16),
           Text(
             'All caught up!',
             style: GoogleFonts.inter(
               fontWeight: FontWeight.bold,
-              color: const Color(0xFF1F6F5B).withOpacity(0.5),
+              color: const Color(0xFF1F6F5B).withValues(alpha: 0.5),
             ),
           ),
           Text(

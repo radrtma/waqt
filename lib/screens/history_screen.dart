@@ -98,7 +98,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -137,7 +137,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
               shape: BoxShape.circle,
               border: isToday && !isSelected
                   ? Border.all(color: const Color(0xFF1F6F5B), width: 1)
-                  : null,
+                  : isSelected ? Border.all(color: const Color(0xFFF2C94C).withValues(alpha: 0.3), width: 1) : null,
+              boxShadow: isSelected ? [
+                BoxShadow(
+                  color: const Color(0xFFF2C94C).withValues(alpha: 0.15),
+                  blurRadius: 15,
+                  offset: const Offset(0, 4),
+                ),
+              ] : null,
             ),
             alignment: Alignment.center,
             child: Text(
@@ -145,7 +152,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
               style: GoogleFonts.inter(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
-                color: isSelected ? Colors.white : const Color(0xFF1F6F5B),
+                color: isSelected ? const Color(0xFFF2C94C) : const Color(0xFF1F6F5B),
+                shadows: isSelected ? [Shadow(color: const Color(0xFFF2C94C).withValues(alpha: 0.3), blurRadius: 8)] : null,
               ),
             ),
           ),
@@ -186,13 +194,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: isDone ? const Color(0xFF1F6F5B).withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+                  color: isDone ? const Color(0xFF1F6F5B) : Colors.grey.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
+                  border: isDone ? Border.all(color: const Color(0xFFF2C94C).withValues(alpha: 0.2), width: 1) : null,
+                  boxShadow: isDone ? [
+                    BoxShadow(color: const Color(0xFFF2C94C).withValues(alpha: 0.2), blurRadius: 10)
+                  ] : null,
                 ),
                 child: Icon(
                   isDone ? Icons.check_circle_rounded : Icons.cancel_rounded,
-                  color: isDone ? const Color(0xFF1F6F5B) : Colors.grey,
+                  color: isDone ? const Color(0xFFF2C94C) : Colors.grey,
                   size: 24,
+                  shadows: isDone ? [Shadow(color: const Color(0xFFF2C94C).withValues(alpha: 0.4), blurRadius: 10)] : null,
                 ),
               ),
               const SizedBox(width: 16),
@@ -209,8 +222,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 isDone ? 'Completed' : 'Missed',
                 style: GoogleFonts.inter(
                   fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: isDone ? const Color(0xFF1F6F5B) : Colors.grey,
+                  fontWeight: FontWeight.bold,
+                  color: isDone ? const Color(0xFFF2C94C) : Colors.grey,
+                  shadows: isDone ? [Shadow(color: const Color(0xFFF2C94C).withValues(alpha: 0.2), blurRadius: 8)] : null,
                 ),
               ),
             ],
@@ -225,7 +239,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.event_busy_rounded, size: 64, color: Colors.grey.withOpacity(0.5)),
+          Icon(Icons.event_busy_rounded, size: 64, color: Colors.grey.withValues(alpha: 0.5)),
           const SizedBox(height: 16),
           Text(
             'No history data for this day',

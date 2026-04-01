@@ -22,11 +22,11 @@ class PrayerTracker extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF1F6F5B),
         borderRadius: BorderRadius.circular(40),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
             color: Colors.black12,
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: Offset(0, 4),
           ),
         ],
       ),

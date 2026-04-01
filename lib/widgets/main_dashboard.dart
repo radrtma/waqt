@@ -17,7 +17,6 @@ class MainDashboard extends StatelessWidget {
   final int streakCount;
   final bool isFrozen;
   final Function(String) onQadaComplete;
-  final VoidCallback onToggleFreeze;
 
   const MainDashboard({
     super.key,
@@ -33,7 +32,6 @@ class MainDashboard extends StatelessWidget {
     required this.streakCount,
     required this.isFrozen,
     required this.onQadaComplete,
-    required this.onToggleFreeze,
   });
 
   @override
@@ -59,7 +57,6 @@ class MainDashboard extends StatelessWidget {
               streakCount: streakCount,
               isFrozen: isFrozen,
               onQadaComplete: onQadaComplete,
-              onToggleFreeze: onToggleFreeze,
             ),
             const SizedBox(height: 32),
             const SizedBox(height: 32),

@@ -8,7 +8,6 @@ class StreakBadge extends StatelessWidget {
   final int streakCount;
   final bool isFrozen;
   final Function(String) onQadaComplete;
-  final VoidCallback onToggleFreeze;
 
   const StreakBadge({
     super.key,
@@ -16,7 +15,6 @@ class StreakBadge extends StatelessWidget {
     required this.streakCount,
     required this.isFrozen,
     required this.onQadaComplete,
-    required this.onToggleFreeze,
   });
 
   @override
@@ -31,7 +29,6 @@ class StreakBadge extends StatelessWidget {
               streakCount: streakCount,
               isFrozen: isFrozen,
               onQadaComplete: onQadaComplete,
-              onToggleFreeze: onToggleFreeze,
             ),
           ),
         );
@@ -57,7 +54,7 @@ class StreakBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Image.asset(
-            isFrozen ? 'assets/images/icon_streak_freeze.png' : 'assets/images/icon_streak.png',
+            isFrozen ? 'assets/images/icon_streak_freeze.png' : (missedPrayers.isNotEmpty && !isFrozen) ? 'assets/images/icon_streak_off.png' : 'assets/images/icon_streak.png',
             width: 24,
             height: 24,
             fit: BoxFit.contain,
@@ -66,7 +63,7 @@ class StreakBadge extends StatelessWidget {
           Text(
             '${streakCount}x',
             style: GoogleFonts.inter(
-              color: isFrozen ? Colors.blue.shade700 : const Color(0xFF1F6F5B),
+              color: isFrozen ? Colors.blue.shade700 : (missedPrayers.isNotEmpty && !isFrozen) ? Colors.grey : const Color(0xFF1F6F5B),
               fontWeight: FontWeight.bold,
               fontSize: 16,
             ),
