@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
-import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -12,19 +12,22 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
+  bool _isInitialized = false;
+  Future<void>? _initFuture;
+
   Future<void> init() async {
+    if (_isInitialized) return;
+    if (_initFuture != null) return _initFuture!;
+
+    _initFuture = _performInit();
+    return _initFuture!;
+  }
+
+  Future<void> _performInit() async {
+    debugPrint('NotificationService: Initializing...');
     tz_data.initializeTimeZones();
-    try {
-      final currentTimeZoneInfo = await FlutterTimezone.getLocalTimezone();
-      final String currentTimeZone = currentTimeZoneInfo.identifier;
-      tz.setLocalLocation(tz.getLocation(currentTimeZone));
-      debugPrint('NotificationService: Local timezone set to $currentTimeZone');
-    } catch (e) {
-      debugPrint(
-        'NotificationService: Error setting local timezone: $e. Falling back to Asia/Jakarta',
-      );
-      tz.setLocalLocation(tz.getLocation('Asia/Jakarta'));
-    }
+    // Default to Asia/Jakarta for manual testing
+    tz.setLocalLocation(tz.getLocation('Asia/Jakarta'));
 
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -42,22 +45,60 @@ class NotificationService {
           iOS: initializationSettingsIOS,
         );
 
-    await _notificationsPlugin.initialize(
+    final bool? initialized = await _notificationsPlugin.initialize(
       settings: initializationSettings,
       onDidReceiveNotificationResponse: (details) {
-        // Handle notification tap
+        debugPrint(
+          'NotificationService: Notification tapped: ${details.payload}',
+        );
       },
     );
+    debugPrint('NotificationService: Plugin initialized: $initialized');
 
-    if (!kIsWeb) {
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        final androidPlugin = _notificationsPlugin
-            .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin
-            >();
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final androidPlugin = _notificationsPlugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
 
-        await androidPlugin?.requestNotificationsPermission();
-        await androidPlugin?.requestExactAlarmsPermission();
+      await androidPlugin?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'waqt_general_v2',
+          'WAQT Notifications',
+          description: 'Main app notifications',
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+        ),
+      );
+
+      await androidPlugin?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'waqt_prayer_v3',
+          'Jadwal Sholat',
+          description: 'Notifikasi jadwal sholat harian',
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+        ),
+      );
+    }
+
+    _isInitialized = true;
+    _initFuture = null;
+    await requestPermissions();
+  }
+
+
+  Future<void> requestPermissions() async {
+    if (kIsWeb) return;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      await Permission.notification.request();
+      if (await Permission.scheduleExactAlarm.isDenied) {
+        await Permission.scheduleExactAlarm.request();
+      }
+      if (!(await Permission.ignoreBatteryOptimizations.isGranted)) {
+        await Permission.ignoreBatteryOptimizations.request();
       }
     }
   }
@@ -67,18 +108,19 @@ class NotificationService {
     required String title,
     required String body,
   }) async {
-    const AndroidNotificationDetails androidDetails =
-        AndroidNotificationDetails(
-          'waqt_notifications',
-          'WAQT Notifications',
-          channelDescription: 'Main app notifications',
-          importance: Importance.max,
-          priority: Priority.high,
-        );
-
+    await init();
     const NotificationDetails platformDetails = NotificationDetails(
-      android: androidDetails,
-      iOS: DarwinNotificationDetails(),
+      android: AndroidNotificationDetails(
+        'waqt_general_v2',
+        'WAQT Notifications',
+        importance: Importance.max,
+        priority: Priority.max,
+        category: AndroidNotificationCategory.alarm,
+        ticker: 'Waqt General',
+        playSound: true,
+        enableVibration: true,
+      ),
+      iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true),
     );
 
     await _notificationsPlugin.show(
@@ -91,11 +133,15 @@ class NotificationService {
 
   Future<void> schedulePrayerNotifications(Map<String, dynamic> timings) async {
     if (kIsWeb) return;
+    await init();
 
+    // Hapus semua jadwal lama sebelum menjadwalkan ulang
     await _notificationsPlugin.cancelAll();
 
     final nowTz = tz.TZDateTime.now(tz.local);
     final prayerNames = ['Fajr', 'Dzuhur', 'Ashar', 'Maghrib', 'Isha'];
+
+    debugPrint('NotificationService: Scheduling daily prayers. Now: $nowTz');
 
     for (int i = 0; i < prayerNames.length; i++) {
       final name = prayerNames[i];
@@ -103,7 +149,7 @@ class NotificationService {
       if (timeStr == null) continue;
 
       final parts = timeStr.split(':');
-      final prayerTime = tz.TZDateTime(
+      var prayerTime = tz.TZDateTime(
         tz.local,
         nowTz.year,
         nowTz.month,
@@ -112,15 +158,20 @@ class NotificationService {
         int.parse(parts[1]),
       );
 
-      if (prayerTime.isAfter(nowTz)) {
-        await _scheduleNotification(
-          id: i,
-          title: 'Waktu $name Tiba!',
-          body: 'Mari tunaikan ibadah sholat $name sekarang.',
-          scheduledDate: prayerTime,
-        );
+      // Jika waktu sudah lewat hari ini, jadwalkan untuk besok
+      if (prayerTime.isBefore(nowTz)) {
+        prayerTime = prayerTime.add(const Duration(days: 1));
       }
 
+      debugPrint('NotificationService: [SCHEDULED] $name at $prayerTime');
+      await _scheduleNotification(
+        id: i,
+        title: 'Waktu $name Tiba!',
+        body: 'Mari tunaikan ibadah sholat $name sekarang.',
+        scheduledDate: prayerTime,
+      );
+
+      // Logika Peringatan (15 menit sebelum sholat berikutnya habis)
       if (i < prayerNames.length - 1) {
         final nextName = prayerNames[i + 1];
         final nextTimeStr = timings[nextName];
@@ -135,17 +186,23 @@ class NotificationService {
             int.parse(nextParts[1]),
           );
 
-          final warningTime = nextPrayerTime.subtract(
+          var warningTime = nextPrayerTime.subtract(
             const Duration(minutes: 15),
           );
-          if (warningTime.isAfter(nowTz)) {
-            await _scheduleNotification(
-              id: i + 100,
-              title: 'Waktu $name Segera Berakhir',
-              body: 'Tinggal 15 menit lagi sebelum waktu $nextName tiba.',
-              scheduledDate: warningTime,
-            );
+
+          if (warningTime.isBefore(nowTz)) {
+            warningTime = warningTime.add(const Duration(days: 1));
           }
+
+          debugPrint(
+            'NotificationService: [SCHEDULED_WARNING] for $name at $warningTime',
+          );
+          await _scheduleNotification(
+            id: i + 100,
+            title: 'Waktu ${prayerNames[i]} Segera Berakhir',
+            body: 'Tinggal 15 menit lagi sebelum waktu $nextName tiba.',
+            scheduledDate: warningTime,
+          );
         }
       }
     }
@@ -157,38 +214,48 @@ class NotificationService {
     required String body,
     required DateTime scheduledDate,
   }) async {
+    final tzDate = tz.TZDateTime.from(scheduledDate, tz.local);
+
     try {
       await _notificationsPlugin.zonedSchedule(
         id: id,
         title: title,
         body: body,
-        scheduledDate: tz.TZDateTime.from(scheduledDate, tz.local),
+        scheduledDate: tzDate,
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
-            'waqt_prayer_times',
-            'Waktu Sholat',
-            channelDescription: 'Jadwal sholat harian',
+            'waqt_prayer_v3',
+            'Jadwal Sholat',
             importance: Importance.max,
             priority: Priority.high,
+            ticker: 'Waqt Prayer',
+            playSound: true,
+            enableVibration: true,
           ),
-          iOS: DarwinNotificationDetails(),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentSound: true,
+          ),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       );
     } catch (e) {
-      // Fallback to inexact if exact is not permitted
+      debugPrint('NotificationService: Critical failure in zonedSchedule: $e');
+      // Fallback ke inexact jika exact dilarang sistem
       await _notificationsPlugin.zonedSchedule(
         id: id,
         title: title,
         body: body,
-        scheduledDate: tz.TZDateTime.from(scheduledDate, tz.local),
+        scheduledDate: tzDate,
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
-            'waqt_prayer_times',
-            'Waktu Sholat',
-            channelDescription: 'Jadwal sholat harian',
+            'waqt_prayer_v3',
+            'Jadwal Sholat',
             importance: Importance.max,
             priority: Priority.high,
+            ticker: 'Waqt Fallback',
+            playSound: true,
+            enableVibration: true,
           ),
           iOS: DarwinNotificationDetails(),
         ),
