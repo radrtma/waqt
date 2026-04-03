@@ -47,6 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // Global State
   int _streakCount = 7;
   bool _isFrozen = false;
+  bool _hasMissedToday = false; // Tracks if any prayer was missed today (real-time)
   String _userName = 'User';
   Map<String, bool> _prayerStates = {
     'Fajr': false,
@@ -65,7 +66,11 @@ class _HomeScreenState extends State<HomeScreen> {
     _initializeMockHistory();
     NotificationService().init();
     // Check for day change every minute
-    Timer.periodic(const Duration(minutes: 1), (timer) => _checkDayChange());
+    Timer.periodic(const Duration(minutes: 1), (timer) {
+      if (mounted) {
+        _checkDayChange();
+      }
+    });
   }
 
   void _initializeMockHistory() {
@@ -86,19 +91,37 @@ class _HomeScreenState extends State<HomeScreen> {
   void _updatePrayerStatus(String label, bool status) {
     setState(() {
       _prayerStates[label] = status;
+
+      // Jika semua sholat sudah dikerjakan, unfreeze streak
+      bool hasUncompletedPrayers = _prayerStates.entries.any((e) => !e.value);
+      if (!hasUncompletedPrayers && _isFrozen) {
+        _isFrozen = false;
+        _hasMissedToday = false; 
+      }
     });
+  }
+
+  /// Called from HomeContent when a prayer is detected as missed in real-time
+  void _onPrayerMissed() {
+    if (!_hasMissedToday) {
+      setState(() {
+        _hasMissedToday = true;
+        _isFrozen = true; // Freeze immediately, don't extinguish
+      });
+    }
   }
 
   void _onQadaComplete(String label) {
     setState(() {
       _qadaCompleted.add(label);
       _prayerStates[label] = true; // Mark as done so streak doesn't break at day change
-    });
-  }
 
-  void _toggleFreeze() {
-    setState(() {
-      _isFrozen = !_isFrozen;
+      // If all prayers are now completed, immediately unfreeze the streak
+      bool hasUncompletedPrayers = _prayerStates.entries.any((e) => !e.value);
+      if (!hasUncompletedPrayers && _isFrozen) {
+        _isFrozen = false;
+        _hasMissedToday = false; // Reset daily tracking so we can detect future misses today if needed
+      }
     });
   }
 
@@ -117,29 +140,25 @@ class _HomeScreenState extends State<HomeScreen> {
   void _checkDayChange() {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     if (today != _lastUpdateDate) {
-      bool isMissed = _prayerStates.values.any((done) => !done);
+      // Check if there are still uncompleted prayers (not done & not qada'd)
+      bool hasUncompletedPrayers = _prayerStates.entries.any(
+        (e) => !e.value, // any prayer still false = not done
+      );
       
-      if (isMissed) {
-        if (_isFrozen) {
-          // Jika sudah nunggak sebelumnya dan nunggak lagi, baru hangus
-          _resetStreak();
-          _isFrozen = false;
-          NotificationService().showStreakResetAlert();
-        } else {
-          // Jika baru nunggak, freeze dulu
-          _isFrozen = true;
-          _prayerStates.forEach((prayer, done) {
-            if (!done) NotificationService().showQadaAlert(prayer);
-          });
-          // streakCount tetap
-        }
-      } else {
-        // Jika semua sholat selesai (normal atau qada)
-        if (!_isFrozen) {
-          _streakCount++; // Hanya bertambah jika tidak sedang freeze
-        }
-        _isFrozen = false; // Cairkan jika sebelumnya frozen
+      if (_isFrozen && hasUncompletedPrayers) {
+        // Was frozen (had missed prayers) AND qada was NOT completed → RESET streak
+        _resetStreak();
+        _isFrozen = false;
+        NotificationService().showStreakResetAlert();
+      } else if (_isFrozen && !hasUncompletedPrayers) {
+        // Was frozen but all qada completed → unfreeze, streak preserved (no increment)
+        _isFrozen = false;
+      } else if (!_isFrozen && !hasUncompletedPrayers) {
+        // Normal day, all prayers done → increment streak
+        _streakCount++;
       }
+      // Note: !_isFrozen && hasUncompletedPrayers shouldn't happen because
+      // _onPrayerMissed() sets _isFrozen = true in real-time
       
       // Save to history before reset
       _historyData[_lastUpdateDate] = Map.from(_prayerStates);
@@ -152,6 +171,7 @@ class _HomeScreenState extends State<HomeScreen> {
         'Isha': false,
       };
       _qadaCompleted.clear();
+      _hasMissedToday = false;
       _lastUpdateDate = today;
       setState(() {});
     }
@@ -168,7 +188,7 @@ class _HomeScreenState extends State<HomeScreen> {
         isFrozen: _isFrozen,
         qadaCompleted: _qadaCompleted,
         onQadaComplete: _onQadaComplete,
-        onToggleFreeze: _toggleFreeze,
+        onPrayerMissed: _onPrayerMissed,
       ),
       const PrayScreen(),
       HistoryScreen(historyData: _historyData),

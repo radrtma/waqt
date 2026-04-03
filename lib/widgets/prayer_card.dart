@@ -17,6 +17,27 @@ class PrayerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    IconData prayerIcon;
+    switch (prayerName.toLowerCase()) {
+      case 'fajr':
+        prayerIcon = Icons.wb_twilight_rounded;
+        break;
+      case 'dzuhur':
+      case 'dhuhr':
+        prayerIcon = Icons.wb_sunny_rounded;
+        break;
+      case 'ashar':
+      case 'asr':
+        prayerIcon = Icons.wb_cloudy_rounded;
+        break;
+      case 'maghrib':
+        prayerIcon = Icons.nights_stay_rounded;
+        break;
+      case 'isha':
+      default:
+        prayerIcon = Icons.nightlight_round;
+    }
+
     return Container(
       width: double.infinity,
       height: 200,
@@ -24,12 +45,12 @@ class PrayerCard extends StatelessWidget {
         color: const Color(0xFF1F6F5B),
         borderRadius: BorderRadius.circular(30),
         border: Border.all(
-          color: const Color(0xFFF2C94C).withOpacity(0.1),
+          color: const Color(0xFFF2C94C).withValues(alpha: 0.1),
           width: 0.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF243A5E).withOpacity(0.25), // Softer, broader shadow
+            color: const Color(0xFF243A5E).withValues(alpha: 0.25), // Softer, broader shadow
             blurRadius: 40,
             offset: const Offset(0, 20),
           ),
@@ -59,12 +80,12 @@ class PrayerCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      Icons.nightlight_round,
+                      prayerIcon,
                       color: const Color(0xFFF2C94C),
                       size: 28,
                       shadows: [
                         Shadow(
-                          color: const Color(0xFFF2C94C).withOpacity(0.3),
+                          color: const Color(0xFFF2C94C).withValues(alpha: 0.3),
                           blurRadius: 10,
                         ),
                       ],
@@ -78,7 +99,7 @@ class PrayerCard extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                         shadows: [
                           Shadow(
-                            color: const Color(0xFFF2C94C).withOpacity(0.2),
+                            color: const Color(0xFFF2C94C).withValues(alpha: 0.2),
                             blurRadius: 8,
                           ),
                         ],
@@ -98,19 +119,30 @@ class PrayerCard extends StatelessWidget {
                 Text(
                   nextPrayerInfo,
                   style: GoogleFonts.inter(
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                     fontSize: 12,
                   ),
                 ),
                 if (nextPrayerCountdown != null) ...[
                   const SizedBox(height: 4),
-                  Text(
-                    nextPrayerCountdown!,
-                    style: GoogleFonts.inter(
-                      color: const Color(0xFFF2C94C), // Gold for the countdown
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.access_time_rounded,
+                        color: Color(0xFFF2C94C),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        nextPrayerCountdown!,
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFFF2C94C), // Gold for the countdown
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ],

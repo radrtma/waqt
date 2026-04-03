@@ -38,21 +38,24 @@ class _StreakScreenState extends State<StreakScreen> {
   }
 
   bool _isExtinguished() {
-    return _currentMissed.isNotEmpty && !widget.isFrozen;
+    // Only extinguished when streak was actually reset (qada not completed on time)
+    return widget.streakCount == 0 && !widget.isFrozen;
   }
 
   @override
   Widget build(BuildContext context) {
+    bool isAllQadaDone = _currentMissed.isNotEmpty && _completedThisSession.length == _currentMissed.length;
+    bool isCurrentlyFrozen = widget.isFrozen && !isAllQadaDone;
     bool isExtinguished = _isExtinguished() && _completedThisSession.length < _currentMissed.length;
     
     String streakIcon = 'assets/images/icon_streak.png';
-    if (widget.isFrozen) {
+    if (isCurrentlyFrozen) {
       streakIcon = 'assets/images/icon_streak_freeze.png';
     } else if (isExtinguished) streakIcon = 'assets/images/icon_streak_off.png';
 
     Color themeColor = isExtinguished ? Colors.grey : const Color(0xFFF2C94C); // Gold
     Color heroBg = isExtinguished ? Colors.white : const Color(0xFF1F6F5B); // Dark Green
-    if (widget.isFrozen) {
+    if (isCurrentlyFrozen) {
       themeColor = Colors.white;
       heroBg = Colors.blue.shade700;
     }
@@ -67,7 +70,7 @@ class _StreakScreenState extends State<StreakScreen> {
             children: [
               _buildHeader(context),
               const SizedBox(height: 32),
-              _buildStreakHeroCard(themeColor, heroBg, streakIcon, isExtinguished),
+              _buildStreakHeroCard(themeColor, heroBg, streakIcon, isExtinguished, isCurrentlyFrozen),
               const SizedBox(height: 24),
               _buildStatusCardsRow(heroBg, themeColor),
               const SizedBox(height: 40),
@@ -114,7 +117,7 @@ class _StreakScreenState extends State<StreakScreen> {
     );
   }
 
-  Widget _buildStreakHeroCard(Color themeColor, Color bgColor, String streakIcon, bool isExtinguished) {
+  Widget _buildStreakHeroCard(Color themeColor, Color bgColor, String streakIcon, bool isExtinguished, bool isCurrentlyFrozen) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
@@ -128,7 +131,7 @@ class _StreakScreenState extends State<StreakScreen> {
             blurRadius: 40,
             offset: const Offset(0, 20),
           ),
-          if (!isExtinguished && !widget.isFrozen) // Gold Glow
+          if (!isExtinguished && !isCurrentlyFrozen) // Gold Glow
             BoxShadow(
               color: themeColor.withValues(alpha: 0.15),
               blurRadius: 50,
@@ -171,7 +174,7 @@ class _StreakScreenState extends State<StreakScreen> {
             ),
           ),
           Text(
-            widget.isFrozen 
+            isCurrentlyFrozen 
               ? 'STREAK FROZEN' 
               : isExtinguished ? 'STREAK EXTINGUISHED' : 'DAYS STREAK',
             style: GoogleFonts.inter(
@@ -244,10 +247,10 @@ class _StreakScreenState extends State<StreakScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: isActive ? Colors.white.withValues(alpha: 0.2) : color.withValues(alpha: 0.1),
+                color: isActive ? Colors.white.withValues(alpha: 0.2) : const Color(0xFF1F6F5B).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: isActive ? Colors.white : color, size: 24),
+              child: Icon(icon, color: isActive ? Colors.white : const Color(0xFF1F6F5B), size: 24),
             ),
             const SizedBox(height: 12),
             Text(

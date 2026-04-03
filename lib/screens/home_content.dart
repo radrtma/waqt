@@ -13,6 +13,7 @@ class HomeContent extends StatefulWidget {
   final String userName;
   final Set<String> qadaCompleted;
   final Function(String) onQadaComplete;
+  final VoidCallback onPrayerMissed;
 
   const HomeContent({
     super.key,
@@ -23,6 +24,7 @@ class HomeContent extends StatefulWidget {
     required this.isFrozen,
     required this.qadaCompleted,
     required this.onQadaComplete,
+    required this.onPrayerMissed,
   });
 
   @override
@@ -37,6 +39,7 @@ class _HomeContentState extends State<HomeContent> {
   String? _errorMessage;
   DateTime _now = DateTime.now();
   Timer? _timer;
+  final Set<String> _notifiedMissed = {}; // Track which prayers already triggered freeze
 
   @override
   void initState() {
@@ -129,7 +132,18 @@ class _HomeContentState extends State<HomeContent> {
       endTime = endTime.add(const Duration(days: 1));
     }
 
-    return _now.isAfter(endTime);
+    final isMissed = _now.isAfter(endTime);
+    
+    // Trigger freeze in real-time when a prayer is first detected as missed
+    if (isMissed && !_notifiedMissed.contains(prayerName)) {
+      _notifiedMissed.add(prayerName);
+      // Use post-frame callback to avoid setState during build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.onPrayerMissed();
+      });
+    }
+    
+    return isMissed;
   }
 
   void _togglePrayer(String label) {
