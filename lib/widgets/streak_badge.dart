@@ -4,10 +4,10 @@ import 'hover_effect.dart';
 import '../screens/streak_screen.dart';
 
 class StreakBadge extends StatelessWidget {
-  final List<String> missedPrayers;
+  final List<Map<String, dynamic>> missedPrayers;
   final int streakCount;
   final bool isFrozen;
-  final Function(String) onQadaComplete;
+  final Function(int, String) onQadaComplete;
 
   const StreakBadge({
     super.key,

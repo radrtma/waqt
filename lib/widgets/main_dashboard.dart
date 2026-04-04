@@ -13,10 +13,10 @@ class MainDashboard extends StatelessWidget {
   final DateTime currentTime;
   final bool Function(String) isPrayerTimeReached;
   final bool Function(String) isPrayerMissed;
-  final List<String> missedPrayers;
+  final List<Map<String, dynamic>> missedPrayers;
   final int streakCount;
   final bool isFrozen;
-  final Function(String) onQadaComplete;
+  final Function(int, String) onQadaComplete;
 
   const MainDashboard({
     super.key,

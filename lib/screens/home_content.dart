@@ -12,8 +12,9 @@ class HomeContent extends StatefulWidget {
   final bool isFrozen;
   final String userName;
   final Set<String> qadaCompleted;
-  final Function(String) onQadaComplete;
-  final VoidCallback onPrayerMissed;
+  final List<Map<String, dynamic>> missedPrayers;
+  final Function(int, String) onQadaComplete;
+  final Function(String) onPrayerMissed;
 
   const HomeContent({
     super.key,
@@ -23,6 +24,7 @@ class HomeContent extends StatefulWidget {
     required this.streakCount,
     required this.isFrozen,
     required this.qadaCompleted,
+    required this.missedPrayers,
     required this.onQadaComplete,
     required this.onPrayerMissed,
   });
@@ -142,7 +144,7 @@ class _HomeContentState extends State<HomeContent> {
       _notifiedMissed.add(prayerName);
       // Use post-frame callback to avoid setState during build
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        widget.onPrayerMissed();
+        widget.onPrayerMissed(prayerName);
       });
     }
     
@@ -185,14 +187,6 @@ class _HomeContentState extends State<HomeContent> {
       return Center(child: Text('Error: $_errorMessage'));
     }
 
-    final missedPrayers = [
-      'Fajr',
-      'Dzuhur',
-      'Ashar',
-      'Maghrib',
-      'Isha',
-    ].where((p) => _isPrayerMissed(p)).toList();
-
     return SingleChildScrollView(
       child: Column(
         children: [
@@ -210,7 +204,7 @@ class _HomeContentState extends State<HomeContent> {
                 currentTime: _now,
                 isPrayerTimeReached: _isPrayerTimeReached,
                 isPrayerMissed: _isPrayerMissed,
-                missedPrayers: missedPrayers,
+                missedPrayers: widget.missedPrayers, // Gunakan data dari Database
                 streakCount: widget.streakCount,
                 isFrozen: widget.isFrozen,
                 onQadaComplete: widget.onQadaComplete,

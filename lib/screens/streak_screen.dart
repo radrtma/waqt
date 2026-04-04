@@ -3,10 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 import '../widgets/hover_effect.dart';
 
 class StreakScreen extends StatefulWidget {
-  final List<String> missedPrayers;
+  final List<Map<String, dynamic>> missedPrayers;
   final int streakCount;
   final bool isFrozen;
-  final Function(String) onQadaComplete;
+  final Function(int, String) onQadaComplete;
 
   const StreakScreen({
     super.key,
@@ -21,7 +21,7 @@ class StreakScreen extends StatefulWidget {
 }
 
 class _StreakScreenState extends State<StreakScreen> {
-  late List<String> _currentMissed;
+  late List<Map<String, dynamic>> _currentMissed;
   final List<String> _completedThisSession = [];
 
   @override
@@ -30,8 +30,8 @@ class _StreakScreenState extends State<StreakScreen> {
     _currentMissed = List.from(widget.missedPrayers);
   }
 
-  void _completeQada(String prayer) {
-    widget.onQadaComplete(prayer);
+  void _completeQada(int id, String prayer) {
+    widget.onQadaComplete(id, prayer);
     setState(() {
       _completedThisSession.add(prayer);
     });
@@ -303,12 +303,14 @@ class _StreakScreenState extends State<StreakScreen> {
         if (_currentMissed.isEmpty)
           _buildEmptyState()
         else
-          ..._currentMissed.map((prayer) => _buildQadaItem(prayer)),
+          ..._currentMissed.map((qadaMap) => _buildQadaItem(qadaMap)),
       ],
     );
   }
 
-  Widget _buildQadaItem(String prayer) {
+  Widget _buildQadaItem(Map<String, dynamic> qadaMap) {
+    final String prayer = qadaMap['prayer_name'] ?? 'Sholat';
+    final int id = qadaMap['id'] ?? 0;
     bool isDone = _completedThisSession.contains(prayer);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -365,7 +367,7 @@ class _StreakScreenState extends State<StreakScreen> {
             const Icon(Icons.verified_rounded, color: Color(0xFF1F6F5B), size: 32)
           else
             HoverEffect(
-              onTap: () => _completeQada(prayer),
+              onTap: () => _completeQada(id, prayer),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(

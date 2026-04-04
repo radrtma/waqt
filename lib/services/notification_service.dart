@@ -135,9 +135,7 @@ class NotificationService {
     if (kIsWeb) return;
     await init();
 
-    // Hapus semua jadwal lama sebelum menjadwalkan ulang
-    await _notificationsPlugin.cancelAll();
-
+    await init();
     final nowTz = tz.TZDateTime.now(tz.local);
     final prayerNames = ['Fajr', 'Dzuhur', 'Ashar', 'Maghrib', 'Isha'];
 
@@ -205,6 +203,39 @@ class NotificationService {
           );
         }
       }
+
+      // LOGIKA BARU: Jadwalkan NOTIFIKASI TERLEWAT (Qada) untuk sholat sebelumnya
+      // Notifikasi terlewat untuk sholat [i] akan muncul pada jam sholat [i+1]
+      if (i < prayerNames.length - 1) {
+        final nextName = prayerNames[i + 1];
+        final nextTimeStr = timings[nextName];
+        if (nextTimeStr != null) {
+          final nextParts = nextTimeStr.split(':');
+          final nextPrayerTime = tz.TZDateTime(
+            tz.local,
+            nowTz.year,
+            nowTz.month,
+            nowTz.day,
+            int.parse(nextParts[0]),
+            int.parse(nextParts[1]),
+          );
+
+          var missedAlertTime = nextPrayerTime;
+          if (missedAlertTime.isBefore(nowTz)) {
+            missedAlertTime = missedAlertTime.add(const Duration(days: 1));
+          }
+
+          debugPrint(
+            'NotificationService: [SCHEDULED_QADA_ALERT] for $name at $missedAlertTime',
+          );
+          await _scheduleNotification(
+            id: i + 200,
+            title: 'Sholat $name Terlewat',
+            body: 'Waktu $name telah habis. Sholat ini masuk ke daftar Qada.',
+            scheduledDate: missedAlertTime,
+          );
+        }
+      }
     }
   }
 
@@ -265,11 +296,14 @@ class NotificationService {
   }
 
   Future<void> showQadaAlert(String prayerName) async {
+    final prayerNames = ['Fajr', 'Dzuhur', 'Ashar', 'Maghrib', 'Isha'];
+    int index = prayerNames.indexOf(prayerName);
+    if (index == -1) index = 0;
+
     await showNotification(
-      id: 999,
-      title: 'Sholat Terlewat',
-      body:
-          'Waktu $prayerName telah habis. Sholat ini telah masuk ke daftar Qada.',
+      id: 1000 + index,
+      title: 'Sholat $prayerName Terlewat',
+      body: 'Waktu $prayerName telah habis. Sholat ini masuk ke daftar Qada.',
     );
   }
 
@@ -280,5 +314,14 @@ class NotificationService {
       body:
           'Streak ketaatan Anda harus terhenti. Yuk, mulai lagi dari awal besok!',
     );
+  }
+
+  Future<void> cancelSpecificQadaAlert(String prayerName) async {
+    final prayerNames = ['Fajr', 'Dzuhur', 'Ashar', 'Maghrib', 'Isha'];
+    int index = prayerNames.indexOf(prayerName);
+    if (index != -1) {
+      await _notificationsPlugin.cancel(id: index + 200);
+      debugPrint('NotificationService: Cancelled scheduled Qada alert for $prayerName (ID: ${index + 200})');
+    }
   }
 }
