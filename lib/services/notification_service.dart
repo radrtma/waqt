@@ -31,7 +31,7 @@ class NotificationService {
     );
 
     await _notificationsPlugin.initialize(
-      initializationSettings,
+      settings: initializationSettings,
       onDidReceiveNotificationResponse: (details) {
         // Handle notification tap
       },
@@ -66,7 +66,12 @@ class NotificationService {
       iOS: DarwinNotificationDetails(),
     );
 
-    await _notificationsPlugin.show(id, title, body, platformDetails);
+    await _notificationsPlugin.show(
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: platformDetails,
+    );
   }
 
   Future<void> schedulePrayerNotifications(Map<String, dynamic> timings) async {
@@ -134,11 +139,11 @@ class NotificationService {
     required DateTime scheduledDate,
   }) async {
     await _notificationsPlugin.zonedSchedule(
-      id,
-      title,
-      body,
-      tz.TZDateTime.from(scheduledDate, tz.local),
-      const NotificationDetails(
+      id: id,
+      title: title,
+      body: body,
+      scheduledDate: tz.TZDateTime.from(scheduledDate, tz.local),
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           'waqt_prayer_times',
           'Waktu Sholat',
@@ -146,7 +151,6 @@ class NotificationService {
           importance: Importance.max,
           priority: Priority.high,
         ),
-        iOS: DarwinNotificationDetails(),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
