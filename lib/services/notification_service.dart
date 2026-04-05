@@ -3,6 +3,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -26,8 +27,14 @@ class NotificationService {
   Future<void> _performInit() async {
     debugPrint('NotificationService: Initializing...');
     tz_data.initializeTimeZones();
-    // Default to Asia/Jakarta for manual testing
-    tz.setLocalLocation(tz.getLocation('Asia/Jakarta'));
+    try {
+      final dynTimeZoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(dynTimeZoneName.toString()));
+      debugPrint('NotificationService: Timezone set to \$dynTimeZoneName');
+    } catch (e) {
+      debugPrint('NotificationService: Failed to get local timezone, defaulting to Asia/Jakarta');
+      tz.setLocalLocation(tz.getLocation('Asia/Jakarta'));
+    }
 
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -93,7 +100,18 @@ class NotificationService {
   Future<void> requestPermissions() async {
     if (kIsWeb) return;
     if (defaultTargetPlatform == TargetPlatform.android) {
+      debugPrint('NotificationService: Requesting permissions...');
       await Permission.notification.request();
+      
+      final androidPlugin = _notificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      if (androidPlugin != null) {
+        final hasExactAlarm = await androidPlugin.canScheduleExactNotifications() ?? false;
+        if (!hasExactAlarm) {
+          debugPrint('NotificationService: Requesting exact alarm permission from OS...');
+          await androidPlugin.requestExactAlarmsPermission();
+        }
+      }
+
       if (await Permission.scheduleExactAlarm.isDenied) {
         await Permission.scheduleExactAlarm.request();
       }
@@ -270,8 +288,9 @@ class NotificationService {
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       );
+      debugPrint('NotificationService: Successfully scheduled exact alarm for ID $id');
     } catch (e) {
-      debugPrint('NotificationService: Critical failure in zonedSchedule: $e');
+      debugPrint('NotificationService: Critical failure in zonedSchedule EXACT: $e');
       // Fallback ke inexact jika exact dilarang sistem
       await _notificationsPlugin.zonedSchedule(
         id: id,

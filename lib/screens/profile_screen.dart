@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+
 class ProfileScreen extends StatelessWidget {
   final String userName;
   final Function(String) onNameChanged;
@@ -212,13 +213,16 @@ class ProfileScreen extends StatelessWidget {
         _buildSettingsItem(Icons.notifications_active_rounded, 'Notifications', 'Adhan & reminders'),
         _buildSettingsItem(Icons.location_on_rounded, 'Location', 'Jakarta, Indonesia'),
         _buildSettingsItem(Icons.language_rounded, 'Language', 'English'),
-        _buildSettingsItem(Icons.info_rounded, 'About WAQT', 'Version 1.0.0'),
+        _buildSettingsItem(Icons.info_rounded, 'About WAQT', 'Version 1.0.0', onTap: null),
+
       ],
     );
   }
 
-  Widget _buildSettingsItem(IconData icon, String title, String subtitle) {
-    return Container(
+  Widget _buildSettingsItem(IconData icon, String title, String subtitle, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -268,6 +272,7 @@ class ProfileScreen extends StatelessWidget {
           ),
           Icon(Icons.chevron_right_rounded, color: Colors.grey[400]),
         ],
+      ),
       ),
     );
   }
