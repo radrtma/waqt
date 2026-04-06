@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import '../services/notification_service.dart';
+import '../services/prayer_service.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   final String userName;
   final Function(String) onNameChanged;
 
@@ -11,8 +17,186 @@ class ProfileScreen extends StatelessWidget {
     required this.onNameChanged,
   });
 
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  String _selectedAdzan = 'bilal';
+  String _selectedCity = 'Jakarta';
+  String _selectedCountry = 'Indonesia';
+  String _memberSince = '...';
+  String? _profileImagePath;
+
+  final Map<String, String> _cityOptions = {
+    'Jakarta': 'Indonesia',
+    'Bandung': 'Indonesia',
+    'Surabaya': 'Indonesia',
+    'Semarang': 'Indonesia',
+    'Medan': 'Indonesia',
+    'Makassar': 'Indonesia',
+    'Yogyakarta': 'Indonesia',
+    'Palembang': 'Indonesia',
+    'Denpasar': 'Indonesia',
+    'Kuala Lumpur': 'Malaysia',
+    'Mecca': 'Saudi Arabia',
+    'London': 'United Kingdom',
+  };
+
+  final Map<String, String> _adzanOptions = {
+    'bilal': 'Adzan Bilal',
+    'rcti': 'Adzan RCTI',
+    'rost_1': 'Adzan Rost 1',
+    'rost_2': 'Adzan Rost 2',
+    'upinipin': 'Adzan Upin Ipin',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Member Since logic
+    String? storedDate = prefs.getString('member_since');
+    if (storedDate == null) {
+      storedDate = DateFormat('MMMM yyyy').format(DateTime.now());
+      await prefs.setString('member_since', storedDate);
+    }
+
+    setState(() {
+      _selectedAdzan = prefs.getString('selected_adzan') ?? 'bilal';
+      _selectedCity = prefs.getString('selected_city') ?? 'Jakarta';
+      _selectedCountry = prefs.getString('selected_country') ?? 'Indonesia';
+      _memberSince = storedDate!;
+      _profileImagePath = prefs.getString('profile_image_path');
+    });
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
+      
+      if (image != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('profile_image_path', image.path);
+        setState(() {
+          _profileImagePath = image.path;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking image: $e');
+    }
+  }
+
+  void _showAboutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFFF5E9DA),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'About WAQT',
+          style: GoogleFonts.dmSerifDisplay(color: const Color(0xFF1F6F5B)),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.mosque_rounded, size: 48, color: Color(0xFF1F6F5B)),
+            const SizedBox(height: 16),
+            Text(
+              'Version 1.0.0+1',
+              style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFF1F6F5B)),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Raffi and Ridhwan project prayer app for fullfill CCIT project assignment',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(color: Colors.grey[700]),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK', style: GoogleFonts.inter(color: const Color(0xFF1F6F5B))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showAdzanSelectionDialog(BuildContext context) async {
+    final String? selected = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFFF5E9DA),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Select Adzan',
+          style: GoogleFonts.dmSerifDisplay(
+            color: const Color(0xFF1F6F5B),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: _adzanOptions.entries.map((entry) {
+            return RadioListTile<String>(
+              title: Text(entry.value, style: GoogleFonts.inter()),
+              value: entry.key,
+              groupValue: _selectedAdzan,
+              activeColor: const Color(0xFF1F6F5B),
+              onChanged: (value) {
+                Navigator.pop(context, value);
+              },
+            );
+          }).toList(),
+        ),
+      ),
+    );
+
+    if (selected != null && selected != _selectedAdzan) {
+      await NotificationService().setSelectedAdzan(selected);
+      setState(() {
+        _selectedAdzan = selected;
+      });
+      // Reschedule notifications with new sound
+      final prayerService = PrayerService();
+      try {
+        final result = await prayerService.getPrayerTimings();
+        final timings = result['timings'] as Map<String, dynamic>;
+        await NotificationService().schedulePrayerNotifications(timings);
+      } catch (e) {
+        debugPrint('Failed to reschedule notifications: $e');
+      }
+    }
+  }
+
+  Future<void> _testAdzanNotification() async {
+    final adzanName = _adzanOptions[_selectedAdzan] ?? 'Adzan';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Mengirim test notifikasi $adzanName...')),
+    );
+    await NotificationService().showNotification(
+      id: 999,
+      title: 'Test $adzanName Tiba!',
+      body: 'Ini adalah uji coba suara $adzanName.',
+      useAdzanChannel: true,
+    );
+  }
+
   void _showEditNameDialog(BuildContext context) {
-    final controller = TextEditingController(text: userName);
+    final controller = TextEditingController(text: widget.userName);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -44,7 +228,7 @@ class ProfileScreen extends StatelessWidget {
           ElevatedButton(
             onPressed: () {
               if (controller.text.trim().isNotEmpty) {
-                onNameChanged(controller.text.trim());
+                widget.onNameChanged(controller.text.trim());
               }
               Navigator.pop(context);
             },
@@ -57,6 +241,56 @@ class ProfileScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  void _showLocationDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFFF5E9DA),
+          title: Text(
+            'Pilih Kota',
+            style: GoogleFonts.dmSerifDisplay(color: const Color(0xFF1F6F5B)),
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 300, // Limit height to allow scrolling
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: _cityOptions.length,
+              itemBuilder: (context, index) {
+                final city = _cityOptions.keys.elementAt(index);
+                final country = _cityOptions[city]!;
+                return ListTile(
+                  title: Text(city, style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: const Color(0xFF1F6F5B))),
+                  subtitle: Text(country, style: GoogleFonts.inter(fontSize: 12)),
+                  trailing: (_selectedCity == city) ? const Icon(Icons.check_circle, color: Color(0xFF1F6F5B)) : null,
+                  onTap: () async {
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setString('selected_city', city);
+                    await prefs.setString('selected_country', country);
+                    if (mounted) {
+                      setState(() {
+                        _selectedCity = city;
+                        _selectedCountry = country;
+                      });
+                    }
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Tutup', style: GoogleFonts.inter(color: Colors.grey)),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -131,41 +365,52 @@ class ProfileScreen extends StatelessWidget {
         children: [
           Stack(
             children: [
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFFF2C94C), width: 2), // Gold border
-                  boxShadow: [
-                    BoxShadow(color: const Color(0xFFF2C94C).withValues(alpha: 0.3), blurRadius: 15),
-                  ],
-                ),
-                child: const CircleAvatar(
-                  radius: 50,
-                  backgroundColor: Color(0xFFF5E9DA),
-                  child: Icon(
-                    Icons.person_rounded,
-                    size: 60,
-                    color: Color(0xFF1F6F5B),
+              GestureDetector(
+                onTap: _pickImage,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFF2C94C), width: 2), // Gold border
+                    boxShadow: [
+                      BoxShadow(color: const Color(0xFFF2C94C).withValues(alpha: 0.3), blurRadius: 15),
+                    ],
+                  ),
+                  child: CircleAvatar(
+                    radius: 50,
+                    backgroundColor: const Color(0xFFF5E9DA),
+                    backgroundImage: _profileImagePath != null 
+                        ? FileImage(File(_profileImagePath!)) 
+                        : null,
+                    child: _profileImagePath == null
+                        ? const Icon(
+                            Icons.person_rounded,
+                            size: 60,
+                            color: Color(0xFF1F6F5B),
+                          )
+                        : null,
                   ),
                 ),
               ),
               Positioned(
                 bottom: 0,
                 right: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF2C94C), // Gold camera button
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(color: const Color(0xFFF2C94C).withValues(alpha: 0.4), blurRadius: 8),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.camera_alt_rounded,
-                    color: Color(0xFF1F6F5B),
-                    size: 20,
+                child: GestureDetector(
+                  onTap: _pickImage,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF2C94C), // Gold camera button
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(color: const Color(0xFFF2C94C).withValues(alpha: 0.4), blurRadius: 8),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.camera_alt_rounded,
+                      color: Color(0xFF1F6F5B),
+                      size: 20,
+                    ),
                   ),
                 ),
               ),
@@ -176,7 +421,7 @@ class ProfileScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                userName,
+                widget.userName,
                 style: GoogleFonts.dmSerifDisplay(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -195,7 +440,7 @@ class ProfileScreen extends StatelessWidget {
             ],
           ),
           Text(
-            'Member since March 2024',
+            'Member since $_memberSince',
             style: GoogleFonts.inter(
               fontSize: 14,
               color: Colors.white.withValues(alpha: 0.8),
@@ -209,10 +454,22 @@ class ProfileScreen extends StatelessWidget {
   Widget _buildSettingsList() {
     return Column(
       children: [
-        _buildSettingsItem(Icons.notifications_active_rounded, 'Notifications', 'Adhan & reminders'),
-        _buildSettingsItem(Icons.location_on_rounded, 'Location', 'Jakarta, Indonesia'),
-        _buildSettingsItem(Icons.language_rounded, 'Language', 'English'),
-        _buildSettingsItem(Icons.info_rounded, 'About WAQT', 'Version 1.0.0'),
+        GestureDetector(
+          onTap: () => _showAdzanSelectionDialog(context),
+          child: _buildSettingsItem(Icons.notifications_active_rounded, 'Notifications', 'Adzan: ${_adzanOptions[_selectedAdzan]}'),
+        ),
+        GestureDetector(
+          onTap: _testAdzanNotification,
+          child: _buildSettingsItem(Icons.volume_up_rounded, 'Test Suara Adzan', 'Coba mainkan notifikasi Adzan sekarang'),
+        ),
+        GestureDetector(
+          onTap: () => _showLocationDialog(context),
+          child: _buildSettingsItem(Icons.location_on_rounded, 'Location', '$_selectedCity, $_selectedCountry'),
+        ),
+        GestureDetector(
+          onTap: () => _showAboutDialog(context),
+          child: _buildSettingsItem(Icons.info_rounded, 'About WAQT', 'Version 1.0.0+1'),
+        ),
       ],
     );
   }

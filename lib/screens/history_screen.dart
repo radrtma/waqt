@@ -4,8 +4,13 @@ import 'package:intl/intl.dart';
 
 class HistoryScreen extends StatefulWidget {
   final Map<String, Map<String, bool>> historyData;
+  final List<Map<String, dynamic>> qadaList;
 
-  const HistoryScreen({super.key, required this.historyData});
+  const HistoryScreen({
+    super.key,
+    required this.historyData,
+    required this.qadaList,
+  });
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -58,7 +63,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               Expanded(
                 child: dayData.isEmpty && !DateUtils.isSameDay(_selectedDate, DateTime.now())
                     ? _buildEmptyState()
-                    : _buildPrayerStatusList(dayData),
+                    : _buildPrayerStatusList(dayData, dateStr),
               ),
             ],
           ),
@@ -162,18 +167,36 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _buildPrayerStatusList(Map<String, bool> dayData) {
+  Widget _buildPrayerStatusList(Map<String, bool> dayData, String dateStr) {
     final prayers = ['Fajr', 'Dzuhur', 'Ashar', 'Maghrib', 'Isha'];
-    
-    // If it's today and data is empty, it means no prayers joined yet or all false
-    // But for today we should show the live status or at least current status
-    // In this MVP, we'll just show what's in dayData.
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final isPastDay = _selectedDate.isBefore(todayStart);
     
     return ListView.builder(
       itemCount: prayers.length,
       itemBuilder: (context, index) {
         final prayer = prayers[index];
         final isDone = dayData[prayer] ?? false;
+        final isQada = widget.qadaList.any((q) => q['prayer_name'] == prayer && q['date'] == dateStr);
+        
+        String statusText;
+        Color statusColor;
+        IconData statusIcon;
+        
+        if (isDone) {
+          statusText = 'Completed';
+          statusColor = const Color(0xFFF2C94C); // Gold
+          statusIcon = Icons.check_circle_rounded;
+        } else if (isPastDay || isQada) {
+          statusText = 'Missed';
+          statusColor = Colors.redAccent;
+          statusIcon = Icons.cancel_rounded;
+        } else {
+          statusText = 'Pending';
+          statusColor = Colors.grey;
+          statusIcon = Icons.schedule_rounded;
+        }
         
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
@@ -183,7 +206,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.02),
+                color: Colors.black.withValues(alpha: 0.02),
                 blurRadius: 5,
                 offset: const Offset(0, 2),
               ),
@@ -194,7 +217,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: isDone ? const Color(0xFF1F6F5B) : Colors.grey.withValues(alpha: 0.1),
+                  color: isDone ? const Color(0xFF1F6F5B) : statusColor.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                   border: isDone ? Border.all(color: const Color(0xFFF2C94C).withValues(alpha: 0.2), width: 1) : null,
                   boxShadow: isDone ? [
@@ -202,8 +225,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ] : null,
                 ),
                 child: Icon(
-                  isDone ? Icons.check_circle_rounded : Icons.cancel_rounded,
-                  color: isDone ? const Color(0xFFF2C94C) : Colors.grey,
+                  statusIcon,
+                  color: isDone ? const Color(0xFFF2C94C) : statusColor,
                   size: 24,
                   shadows: isDone ? [Shadow(color: const Color(0xFFF2C94C).withValues(alpha: 0.4), blurRadius: 10)] : null,
                 ),
@@ -219,11 +242,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
               const Spacer(),
               Text(
-                isDone ? 'Completed' : 'Missed',
+                statusText,
                 style: GoogleFonts.inter(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: isDone ? const Color(0xFFF2C94C) : Colors.grey,
+                  color: statusColor,
                   shadows: isDone ? [Shadow(color: const Color(0xFFF2C94C).withValues(alpha: 0.2), blurRadius: 8)] : null,
                 ),
               ),

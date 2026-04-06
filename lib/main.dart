@@ -8,6 +8,8 @@ import 'screens/pray_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/profile_screen.dart';
 import 'services/notification_service.dart';
+import 'services/database_service.dart';
+import 'services/prayer_service.dart';
 
 void main() {
   runApp(const WaqtApp());
@@ -45,10 +47,10 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
   // Global State
-  int _streakCount = 7;
+  int _streakCount = 0;
   bool _isFrozen = false;
-  bool _hasMissedToday = false; // Tracks if any prayer was missed today (real-time)
   String _userName = 'User';
+  List<Map<String, dynamic>> _qadaList = [];
   Map<String, bool> _prayerStates = {
     'Fajr': false,
     'Dzuhur': false,
@@ -59,12 +61,16 @@ class _HomeScreenState extends State<HomeScreen> {
   final Map<String, Map<String, bool>> _historyData = {};
   final Set<String> _qadaCompleted = {};
   String _lastUpdateDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  final DatabaseService _db = DatabaseService();
+  final PrayerService _prayerService = PrayerService();
+
+  bool _isLoading = true; // Mencegah race condition UI
 
   @override
   void initState() {
     super.initState();
-    _initializeMockHistory();
-    NotificationService().init();
+    _loadDataFromDatabase();
+    _initNotifications();
     // Check for day change every minute
     Timer.periodic(const Duration(minutes: 1), (timer) {
       if (mounted) {
@@ -73,112 +79,247 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _initializeMockHistory() {
-    final now = DateTime.now();
-    for (int i = 1; i <= 7; i++) {
-      final date = now.subtract(Duration(days: i));
-      final dateStr = DateFormat('yyyy-MM-dd').format(date);
-      _historyData[dateStr] = {
-        'Fajr': i % 2 == 0,
-        'Dzuhur': i % 3 != 0,
-        'Ashar': true,
-        'Maghrib': i % 4 != 0,
-        'Isha': i % 5 != 0,
-      };
+  Future<void> _loadDataFromDatabase() async {
+    // 1. Load User Profile
+    final name = await _db.getUsername();
+
+    // 2. Load Streak Data
+    final streak = await _db.getStreak();
+
+    // 3. Load History & Qada
+    final history = await _db.getAllHistory();
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    // --- OFFLINE DAY CHANGE CHECK ---
+    int currentStreak = streak['count'];
+    bool currentFrozen = streak['is_frozen'] == 1;
+    String dbLastUpdate = streak['last_updated_date'] ?? '';
+
+    if (dbLastUpdate.isNotEmpty && dbLastUpdate != today) {
+      final unpaidQadaOffline = await _db.getQadaEntries();
+      if (unpaidQadaOffline.isNotEmpty) {
+        currentStreak = 0;
+        currentFrozen = false; // Freeze reset after extinguished
+        await _db.deleteAllUncompletedQada();
+        NotificationService().showStreakResetAlert();
+        debugPrint('OfflineDayChange: Streak EXTINGUISHED.');
+      } else {
+        currentStreak++;
+        debugPrint('OfflineDayChange: Streak incremented to $currentStreak.');
+      }
+      await _db.updateStreak(currentStreak, currentFrozen, today);
+    }
+    // --------------------------------
+
+    // Check if we already have misses today to prevent redundant notifications
+    final qadaList = await _db.getQadaEntries();
+
+    // 4. Initial Sync Check (Mass Sync if needed)
+    final existingTimings = await _db.getTimingsForDate(today);
+    if (existingTimings.isEmpty) {
+      await _syncMonthlyTimings();
+    }
+
+    // 5. Load Current Prayer States for Today
+    final todayStatus =
+        history[today] ??
+        {
+          'Fajr': false,
+          'Dzuhur': false,
+          'Ashar': false,
+          'Maghrib': false,
+          'Isha': false,
+        };
+
+    setState(() {
+      _userName = name;
+      _streakCount = currentStreak; // USE UPDATED STREAK
+      _isFrozen = currentFrozen; // USE UPDATED FROZEN
+      _historyData.addAll(history);
+      _prayerStates = Map.from(todayStatus);
+      _qadaList = qadaList;
+      // Self-healing: Paksa frozen jika ada hutang Qada di database
+      _isFrozen = qadaList.isNotEmpty;
+      _lastUpdateDate = today;
+      _isLoading = false; // Data siap, UI boleh render
+    });
+
+    // Cleanup old history (older than 7 days)
+    await _db.deleteOldHistory(7);
+  }
+
+  Future<void> _syncMonthlyTimings() async {
+    try {
+      final monthlyData = await _prayerService.getMonthlyTimings();
+      for (var day in monthlyData) {
+        // Convert dd-mm-yyyy to yyyy-MM-dd
+        final parts = day['date'].split('-');
+        final formattedDate = "${parts[2]}-${parts[1]}-${parts[0]}";
+
+        await _db.upsertHistory(date: formattedDate, timings: day['timings']);
+      }
+      debugPrint('NotificationService: Monthly sync completed.');
+    } catch (e) {
+      debugPrint('NotificationService: Monthly sync failed: $e');
     }
   }
 
-  void _updatePrayerStatus(String label, bool status) {
+  Future<void> _initNotifications() async {
+    await NotificationService().init();
+  }
+
+  void _updatePrayerStatus(String label, bool status) async {
     setState(() {
       _prayerStates[label] = status;
 
-      // Jika semua sholat sudah dikerjakan, unfreeze streak
-      bool hasUncompletedPrayers = _prayerStates.entries.any((e) => !e.value);
-      if (!hasUncompletedPrayers && _isFrozen) {
-        _isFrozen = false;
-        _hasMissedToday = false; 
+      if (status == true) {
+        // Batalkan jadwal notifikasi "Terlewat" di sistem Android karena sudah dikerjakan
+        NotificationService().cancelSpecificQadaAlert(label);
       }
+
+      // Jika semua kondisi terpenuhi (hari ini & Qada), unfreeze streak
+      _checkIfTrulyAllDone().then((done) {
+        if (done && _isFrozen) {
+          setState(() {
+            _isFrozen = false;
+          });
+          _db.updateStreak(_streakCount, _isFrozen, _lastUpdateDate);
+        }
+      });
+
+      // Sinkronkan ke history data agar langsung tampil di UI HistoryScreen
+      _historyData[_lastUpdateDate] = Map.from(_prayerStates);
     });
+    await _db.upsertHistory(date: _lastUpdateDate, status: _prayerStates);
+    await _db.updateStreak(_streakCount, _isFrozen, _lastUpdateDate);
   }
 
   /// Called from HomeContent when a prayer is detected as missed in real-time
-  void _onPrayerMissed() {
-    if (!_hasMissedToday) {
+  void _onPrayerMissed(String prayerName) async {
+    // 1. Cek apakah sholat ini sudah ada di daftar Qada aktif kita
+    final alreadyInList = _qadaList.any((q) => q['prayer_name'] == prayerName);
+
+    if (!alreadyInList) {
       setState(() {
-        _hasMissedToday = true;
-        _isFrozen = true; // Freeze immediately, don't extinguish
+        _isFrozen = true; // Freeze immediately
       });
+      // Simpan status Frozen ke database agar awet saat aplikasi ditutup
+      await _db.updateStreak(_streakCount, true, _lastUpdateDate);
+
+      // Simpan ke database Qada
+      await _db.addQadaEntry(prayerName, _lastUpdateDate);
+
+      // Berikan notifikasi real-time
+      NotificationService().showQadaAlert(prayerName);
+
+      // Refresh list
+      final newList = await _db.getQadaEntries();
+      setState(() {
+        _qadaList = newList;
+      });
+      debugPrint('RealTime: Missed $prayerName recorded as Qada.');
     }
   }
 
-  void _onQadaComplete(String label) {
-    setState(() {
-      _qadaCompleted.add(label);
-      _prayerStates[label] = true; // Mark as done so streak doesn't break at day change
+  void _onQadaComplete(int id, String label) async {
+    // 1. Hapus dari database secara permanen
+    await _db.completeQadaEntry(id);
+    final newList = await _db.getQadaEntries();
 
-      // If all prayers are now completed, immediately unfreeze the streak
-      bool hasUncompletedPrayers = _prayerStates.entries.any((e) => !e.value);
-      if (!hasUncompletedPrayers && _isFrozen) {
-        _isFrozen = false;
-        _hasMissedToday = false; // Reset daily tracking so we can detect future misses today if needed
-      }
+    setState(() {
+      _qadaList = newList;
+      _qadaCompleted.add(label);
+      _prayerStates[label] =
+          true; // Mark as done for visual feedback on Home Screen
+
+      // If all prayers are now truly completed (including Qada), unfreeze
+      _checkIfTrulyAllDone().then((done) {
+        if (done && _isFrozen) {
+          setState(() {
+            _isFrozen = false;
+          });
+          _db.updateStreak(_streakCount, _isFrozen, _lastUpdateDate);
+        }
+      });
+
+      // Sinkronkan ke history data agar langsung tampil di UI HistoryScreen
+      _historyData[_lastUpdateDate] = Map.from(_prayerStates);
     });
+    await _db.upsertHistory(date: _lastUpdateDate, status: _prayerStates);
+    await _db.updateStreak(_streakCount, _isFrozen, _lastUpdateDate);
   }
 
-  void _updateUserName(String newName) {
+  void _updateUserName(String newName) async {
     setState(() {
       _userName = newName;
     });
+    await _db.updateUsername(newName);
   }
 
-  void _resetStreak() {
-    setState(() {
-      _streakCount = 0;
-    });
+  Future<bool> _checkIfTrulyAllDone() async {
+    final qadaEntries = await _db.getQadaEntries();
+    return qadaEntries.isEmpty; // Cukup pastikan tidak ada Qada
   }
 
-  void _checkDayChange() {
+  Future<void> _checkDayChange() async {
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     if (today != _lastUpdateDate) {
-      // Check if there are still uncompleted prayers (not done & not qada'd)
-      bool hasUncompletedPrayers = _prayerStates.entries.any(
-        (e) => !e.value, // any prayer still false = not done
-      );
-      
-      if (_isFrozen && hasUncompletedPrayers) {
-        // Was frozen (had missed prayers) AND qada was NOT completed → RESET streak
-        _resetStreak();
+      // HUKUMAN TENGAH MALAM: Cek apakah ada hutang Qada dari kemarin yang belum lunas
+      final unpaidQada = await _db.getQadaEntries();
+
+      setState(() {
+        if (unpaidQada.isNotEmpty) {
+          // Jika ada sisa hutang -> Streak Pecah (Reset ke 0)
+          _streakCount = 0;
+          debugPrint(
+            'DayChange: Streak EXTINGUISHED because Qada was not cleared.',
+          );
+        } else {
+          // Jika lunas semua (baik tepat waktu atau via Qada) -> Streak Naik!
+          _streakCount++;
+          debugPrint('DayChange: Streak incremented to $_streakCount.');
+        }
+
+        // Reset untuk hari hari baru
         _isFrozen = false;
+        _qadaList = [];
+        _qadaCompleted.clear();
+        _prayerStates = {
+          'Fajr': false,
+          'Dzuhur': false,
+          'Ashar': false,
+          'Maghrib': false,
+          'Isha': false,
+        };
+        _lastUpdateDate = today;
+      });
+
+      // Update Database
+      if (unpaidQada.isNotEmpty) {
+        await _db.deleteAllUncompletedQada(); // Hapus hutang yang basi
         NotificationService().showStreakResetAlert();
-      } else if (_isFrozen && !hasUncompletedPrayers) {
-        // Was frozen but all qada completed → unfreeze, streak preserved (no increment)
-        _isFrozen = false;
-      } else if (!_isFrozen && !hasUncompletedPrayers) {
-        // Normal day, all prayers done → increment streak
-        _streakCount++;
       }
-      // Note: !_isFrozen && hasUncompletedPrayers shouldn't happen because
-      // _onPrayerMissed() sets _isFrozen = true in real-time
-      
-      // Save to history before reset
-      _historyData[_lastUpdateDate] = Map.from(_prayerStates);
-      
-      _prayerStates = {
-        'Fajr': false,
-        'Dzuhur': false,
-        'Ashar': false,
-        'Maghrib': false,
-        'Isha': false,
-      };
-      _qadaCompleted.clear();
-      _hasMissedToday = false;
-      _lastUpdateDate = today;
-      setState(() {});
+
+      // Upsert baris baru untuk hari yang baru di DB
+      await _db.upsertHistory(date: today, status: _prayerStates);
+      // Simpan status streak terbaru
+      await _db.updateStreak(_streakCount, _isFrozen, today);
+      // Jalankan cleanup mingguan
+      await _db.deleteOldHistory(7);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF5E9DA),
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFF1F6F5B)),
+        ),
+      );
+    }
+
     final List<Widget> screens = [
       HomeContent(
         userName: _userName,
@@ -187,23 +328,24 @@ class _HomeScreenState extends State<HomeScreen> {
         streakCount: _streakCount,
         isFrozen: _isFrozen,
         qadaCompleted: _qadaCompleted,
+        missedPrayers: _qadaList, // Meneruskan daftar Qada dari Database
         onQadaComplete: _onQadaComplete,
         onPrayerMissed: _onPrayerMissed,
       ),
       const PrayScreen(),
-      HistoryScreen(historyData: _historyData),
+      HistoryScreen(
+        historyData: _historyData,
+        qadaList: _qadaList,
+      ),
       ProfileScreen(
-        userName: _userName,
+        userName: _userName, 
         onNameChanged: _updateUserName,
       ),
     ];
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: screens,
-      ),
+      body: IndexedStack(index: _currentIndex, children: screens),
       bottomNavigationBar: CustomBottomNavbar(
         currentIndex: _currentIndex,
         onTap: (index) {

@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'dart:async';
+import '../services/prayer_service.dart';
 
 class PrayScreen extends StatefulWidget {
   const PrayScreen({super.key});
@@ -36,26 +35,23 @@ class _PrayScreenState extends State<PrayScreen> {
 
   Future<void> _fetchPrayerTimes() async {
     try {
-      final response = await http.get(Uri.parse(
-          'https://api.aladhan.com/v1/timingsByCity?city=Jakarta&country=Indonesia&method=11')); // Method 11 is Majlis Ugama Islam Singapura, often used in Indonesia/SE Asia, or method 2 (ISNA)
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+      final prayerService = PrayerService();
+      // getPrayerTimings now defaults to Jakarta, Indonesia
+      final data = await prayerService.getPrayerTimings();
+      
+      if (mounted) {
         setState(() {
-          _timings = data['data']['timings'];
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _error = 'Failed to load prayer times';
+          _timings = data['timings'];
           _isLoading = false;
         });
       }
     } catch (e) {
-      setState(() {
-        _error = 'Connection error. Please check your internet.';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = 'Connection error. Please check your internet.';
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -64,7 +60,7 @@ class _PrayScreenState extends State<PrayScreen> {
     final now = DateTime.now();
     final format = DateFormat("HH:mm");
 
-    final prayers = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+    final prayers = ['Fajr', 'Dzuhur', 'Ashar', 'Maghrib', 'Isha'];
     String active = 'Isha'; // Default to Isha (before Fajr, previous night's Isha is still active)
     
     for (var prayer in prayers) {
@@ -197,8 +193,8 @@ class _PrayScreenState extends State<PrayScreen> {
     final activePrayer = _getActivePrayer();
     final prayers = [
       {'label': 'Fajr', 'icon': Icons.wb_twilight_rounded},
-      {'label': 'Dhuhr', 'icon': Icons.wb_sunny_rounded},
-      {'label': 'Asr', 'icon': Icons.wb_cloudy_rounded},
+      {'label': 'Dzuhur', 'icon': Icons.wb_sunny_rounded},
+      {'label': 'Ashar', 'icon': Icons.wb_cloudy_rounded},
       {'label': 'Maghrib', 'icon': Icons.nights_stay_rounded},
       {'label': 'Isha', 'icon': Icons.bedtime_rounded},
     ];
