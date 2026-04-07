@@ -275,7 +275,8 @@ class NotificationService {
             int.parse(nextParts[1]),
           );
 
-          var missedAlertTime = nextPrayerTime;
+          // Jeda 5 detik agar notifikasi jadwal sholat (yang tepat waktu) muncul duluan
+          var missedAlertTime = nextPrayerTime.add(const Duration(seconds: 5));
           if (missedAlertTime.isBefore(nowTz)) {
             missedAlertTime = missedAlertTime.add(const Duration(days: 1));
           }
