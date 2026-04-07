@@ -12,6 +12,7 @@ import 'services/database_service.dart';
 import 'services/prayer_service.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const WaqtApp());
 }
 
@@ -203,20 +204,28 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _isFrozen = true; // Freeze immediately
       });
-      // Simpan status Frozen ke database agar awet saat aplikasi ditutup
-      await _db.updateStreak(_streakCount, true, _lastUpdateDate);
+      try {
+        // Simpan status Frozen ke database agar awet saat aplikasi ditutup
+        await _db.updateStreak(_streakCount, true, _lastUpdateDate);
 
-      // Simpan ke database Qada
-      await _db.addQadaEntry(prayerName, _lastUpdateDate);
+        // Simpan ke database Qada
+        await _db.addQadaEntry(prayerName, _lastUpdateDate);
+      } catch (e) {
+        debugPrint('Main: Database error during _onPrayerMissed: $e');
+      }
 
-      // Berikan notifikasi real-time
-      NotificationService().showQadaAlert(prayerName);
+      // Berikan notifikasi real-time (Tetap eksekusi walaupun DB gagal)
+      await NotificationService().showQadaAlert(prayerName);
 
-      // Refresh list
-      final newList = await _db.getQadaEntries();
-      setState(() {
-        _qadaList = newList;
-      });
+      try {
+        // Refresh list
+        final newList = await _db.getQadaEntries();
+        setState(() {
+          _qadaList = newList;
+        });
+      } catch (e) {
+        debugPrint('Main: Failed to refresh Qada list: $e');
+      }
       debugPrint('RealTime: Missed $prayerName recorded as Qada.');
     }
   }
@@ -257,6 +266,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<bool> _checkIfTrulyAllDone() async {
+    // Cek apakah masih ada hutang Qada di database
+    // Hapus kewajiban allTodayChecked karena membekukan pengguna dari Qada
     final qadaEntries = await _db.getQadaEntries();
     return qadaEntries.isEmpty; // Cukup pastikan tidak ada Qada
   }

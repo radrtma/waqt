@@ -4,10 +4,10 @@ import 'streak_badge.dart';
 
 class GreetingSection extends StatelessWidget {
   final String userName;
-  final List<String> missedPrayers;
+  final List<Map<String, dynamic>> missedPrayers;
   final int streakCount;
   final bool isFrozen;
-  final Function(String) onQadaComplete;
+  final Function(int, String) onQadaComplete;
 
   const GreetingSection({
     super.key,

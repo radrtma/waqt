@@ -2,48 +2,132 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _notificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  bool _isInitialized = false;
+  Future<void>? _initFuture;
+
+  Future<String> getSelectedAdzan() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('selected_adzan') ?? 'bilal';
+  }
+
+  Future<void> setSelectedAdzan(String soundFileName) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('selected_adzan', soundFileName);
+  }
 
   Future<void> init() async {
+    if (_isInitialized) return;
+    if (_initFuture != null) return _initFuture!;
+
+    _initFuture = _performInit();
+    return _initFuture!;
+  }
+
+  Future<void> _performInit() async {
+    debugPrint('NotificationService: Initializing...');
     tz_data.initializeTimeZones();
-    // Default to Jakarta
-    tz.setLocalLocation(tz.getLocation('Asia/Jakarta'));
-    
+    try {
+      final dynTimeZoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(dynTimeZoneName.toString()));
+      debugPrint('NotificationService: Timezone set to $dynTimeZoneName');
+    } catch (e) {
+      debugPrint('NotificationService: Failed to get local timezone, defaulting to Asia/Jakarta');
+      tz.setLocalLocation(tz.getLocation('Asia/Jakarta'));
+    }
+
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
     const DarwinInitializationSettings initializationSettingsIOS =
         DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
+          requestAlertPermission: true,
+          requestBadgePermission: true,
+          requestSoundPermission: true,
+        );
 
-    const InitializationSettings initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsIOS,
-    );
+    const InitializationSettings initializationSettings =
+        InitializationSettings(
+          android: initializationSettingsAndroid,
+          iOS: initializationSettingsIOS,
+        );
 
-    await _notificationsPlugin.initialize(
+    final bool? initialized = await _notificationsPlugin.initialize(
       settings: initializationSettings,
       onDidReceiveNotificationResponse: (details) {
-        // Handle notification tap
+        debugPrint(
+          'NotificationService: Notification tapped: ${details.payload}',
+        );
       },
     );
+    debugPrint('NotificationService: Plugin initialized: $initialized');
 
-    if (!kIsWeb) {
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        final androidPlugin = _notificationsPlugin.resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
-        
-        await androidPlugin?.requestNotificationsPermission();
-        await androidPlugin?.requestExactAlarmsPermission();
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final androidPlugin = _notificationsPlugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+
+      await androidPlugin?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'waqt_general_v2',
+          'WAQT Notifications',
+          description: 'Main app notifications',
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+        ),
+      );
+
+      // Create a default channel just in case
+      await androidPlugin?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'waqt_prayer_v3',
+          'Jadwal Sholat',
+          description: 'Notifikasi jadwal sholat harian',
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+        ),
+      );
+    }
+
+    _isInitialized = true;
+    _initFuture = null;
+    await requestPermissions();
+  }
+
+  Future<void> requestPermissions() async {
+    if (kIsWeb) return;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      debugPrint('NotificationService: Requesting permissions...');
+      await Permission.notification.request();
+      
+      final androidPlugin = _notificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      if (androidPlugin != null) {
+        final hasExactAlarm = await androidPlugin.canScheduleExactNotifications() ?? false;
+        if (!hasExactAlarm) {
+          debugPrint('NotificationService: Requesting exact alarm permission from OS...');
+          await androidPlugin.requestExactAlarmsPermission();
+        }
+      }
+
+      if (await Permission.scheduleExactAlarm.isDenied) {
+        await Permission.scheduleExactAlarm.request();
+      }
+      if (!(await Permission.ignoreBatteryOptimizations.isGranted)) {
+        await Permission.ignoreBatteryOptimizations.request();
       }
     }
   }
@@ -52,19 +136,47 @@ class NotificationService {
     int id = 0,
     required String title,
     required String body,
+    bool useAdzanChannel = false,
   }) async {
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'waqt_notifications',
-      'WAQT Notifications',
-      channelDescription: 'Main app notifications',
-      importance: Importance.max,
-      priority: Priority.high,
-    );
-
-    const NotificationDetails platformDetails = NotificationDetails(
-      android: androidDetails,
-      iOS: DarwinNotificationDetails(),
-    );
+    await init();
+    
+    NotificationDetails platformDetails;
+    if (useAdzanChannel) {
+      final selectedAdzan = await getSelectedAdzan();
+      final channelId = 'waqt_prayer_$selectedAdzan';
+      platformDetails = NotificationDetails(
+        android: AndroidNotificationDetails(
+          channelId,
+          'Jadwal Sholat',
+          importance: Importance.max,
+          priority: Priority.max,
+          ticker: 'Waqt Prayer',
+          playSound: true,
+          sound: RawResourceAndroidNotificationSound(selectedAdzan),
+          audioAttributesUsage: AudioAttributesUsage.alarm,
+          enableVibration: true,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentSound: true,
+          sound: '$selectedAdzan.caf',
+        ),
+      );
+    } else {
+      platformDetails = const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'waqt_general_v2',
+          'WAQT Notifications',
+          importance: Importance.max,
+          priority: Priority.max,
+          category: AndroidNotificationCategory.alarm,
+          ticker: 'Waqt General',
+          playSound: true,
+          enableVibration: true,
+        ),
+        iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true),
+      );
+    }
 
     await _notificationsPlugin.show(
       id: id,
@@ -76,11 +188,12 @@ class NotificationService {
 
   Future<void> schedulePrayerNotifications(Map<String, dynamic> timings) async {
     if (kIsWeb) return;
+    await init();
 
-    await _notificationsPlugin.cancelAll();
-    
-    final now = DateTime.now();
+    final nowTz = tz.TZDateTime.now(tz.local);
     final prayerNames = ['Fajr', 'Dzuhur', 'Ashar', 'Maghrib', 'Isha'];
+
+    debugPrint('NotificationService: Scheduling daily prayers. Now: $nowTz');
 
     for (int i = 0; i < prayerNames.length; i++) {
       final name = prayerNames[i];
@@ -88,45 +201,94 @@ class NotificationService {
       if (timeStr == null) continue;
 
       final parts = timeStr.split(':');
-      final prayerTime = DateTime(
-        now.year,
-        now.month,
-        now.day,
+      var prayerTime = tz.TZDateTime(
+        tz.local,
+        nowTz.year,
+        nowTz.month,
+        nowTz.day,
         int.parse(parts[0]),
         int.parse(parts[1]),
       );
 
-      if (prayerTime.isAfter(now)) {
-        await _scheduleNotification(
-          id: i,
-          title: 'Waktu $name Tiba!',
-          body: 'Mari tunaikan ibadah sholat $name sekarang.',
-          scheduledDate: prayerTime,
-        );
+      // Jika waktu sudah lewat hari ini, jadwalkan untuk besok
+      if (prayerTime.isBefore(nowTz)) {
+        prayerTime = prayerTime.add(const Duration(days: 1));
       }
 
+      debugPrint('NotificationService: [SCHEDULED] $name at $prayerTime');
+      await _scheduleNotification(
+        id: i,
+        title: 'Waktu $name Tiba!',
+        body: 'Mari tunaikan ibadah sholat $name sekarang.',
+        scheduledDate: prayerTime,
+        isAdzan: true,
+      );
+
+      // Logika Peringatan (15 menit sebelum sholat berikutnya habis)
       if (i < prayerNames.length - 1) {
         final nextName = prayerNames[i + 1];
         final nextTimeStr = timings[nextName];
         if (nextTimeStr != null) {
           final nextParts = nextTimeStr.split(':');
-          final nextPrayerTime = DateTime(
-            now.year,
-            now.month,
-            now.day,
+          final nextPrayerTime = tz.TZDateTime(
+            tz.local,
+            nowTz.year,
+            nowTz.month,
+            nowTz.day,
             int.parse(nextParts[0]),
             int.parse(nextParts[1]),
           );
 
-          final warningTime = nextPrayerTime.subtract(const Duration(minutes: 15));
-          if (warningTime.isAfter(now)) {
-            await _scheduleNotification(
-              id: i + 100,
-              title: 'Waktu $name Segera Berakhir',
-              body: 'Tinggal 15 menit lagi sebelum waktu $nextName tiba.',
-              scheduledDate: warningTime,
-            );
+          var warningTime = nextPrayerTime.subtract(
+            const Duration(minutes: 15),
+          );
+
+          if (warningTime.isBefore(nowTz)) {
+            warningTime = warningTime.add(const Duration(days: 1));
           }
+
+          debugPrint(
+            'NotificationService: [SCHEDULED_WARNING] for $name at $warningTime',
+          );
+          await _scheduleNotification(
+            id: i + 100,
+            title: 'Waktu ${prayerNames[i]} Segera Berakhir',
+            body: 'Tinggal 15 menit lagi sebelum waktu $nextName tiba.',
+            scheduledDate: warningTime,
+          );
+        }
+      }
+
+      // LOGIKA BARU: Jadwalkan NOTIFIKASI TERLEWAT (Qada) untuk sholat sebelumnya
+      // Notifikasi terlewat untuk sholat [i] akan muncul pada jam sholat [i+1]
+      if (i < prayerNames.length - 1) {
+        final nextName = prayerNames[i + 1];
+        final nextTimeStr = timings[nextName];
+        if (nextTimeStr != null) {
+          final nextParts = nextTimeStr.split(':');
+          final nextPrayerTime = tz.TZDateTime(
+            tz.local,
+            nowTz.year,
+            nowTz.month,
+            nowTz.day,
+            int.parse(nextParts[0]),
+            int.parse(nextParts[1]),
+          );
+
+          var missedAlertTime = nextPrayerTime;
+          if (missedAlertTime.isBefore(nowTz)) {
+            missedAlertTime = missedAlertTime.add(const Duration(days: 1));
+          }
+
+          debugPrint(
+            'NotificationService: [SCHEDULED_QADA_ALERT] for $name at $missedAlertTime',
+          );
+          await _scheduleNotification(
+            id: i + 200,
+            title: 'Sholat $name Terlewat',
+            body: 'Waktu $name telah habis. Sholat ini masuk ke daftar Qada.',
+            scheduledDate: missedAlertTime,
+          );
         }
       }
     }
@@ -137,38 +299,117 @@ class NotificationService {
     required String title,
     required String body,
     required DateTime scheduledDate,
+    bool isAdzan = false,
   }) async {
-    await _notificationsPlugin.zonedSchedule(
-      id: id,
-      title: title,
-      body: body,
-      scheduledDate: tz.TZDateTime.from(scheduledDate, tz.local),
-      notificationDetails: const NotificationDetails(
+    final tzDate = tz.TZDateTime.from(scheduledDate, tz.local);
+    
+    NotificationDetails platformDetails;
+    if (isAdzan) {
+      final selectedAdzan = await getSelectedAdzan();
+      final channelId = 'waqt_prayer_$selectedAdzan';
+      
+      // Ensure channel exists
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        final androidPlugin = _notificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+        await androidPlugin?.createNotificationChannel(
+          AndroidNotificationChannel(
+            channelId,
+            'Jadwal Sholat',
+            description: 'Notifikasi jadwal sholat harian dengan Adzan',
+            importance: Importance.max,
+            playSound: true,
+            sound: RawResourceAndroidNotificationSound(selectedAdzan),
+            audioAttributesUsage: AudioAttributesUsage.alarm,
+            enableVibration: true,
+          ),
+        );
+      }
+
+      platformDetails = NotificationDetails(
         android: AndroidNotificationDetails(
-          'waqt_prayer_times',
-          'Waktu Sholat',
-          channelDescription: 'Jadwal sholat harian',
+          channelId,
+          'Jadwal Sholat',
           importance: Importance.max,
           priority: Priority.high,
+          ticker: 'Waqt Prayer',
+          playSound: true,
+          sound: RawResourceAndroidNotificationSound(selectedAdzan),
+          audioAttributesUsage: AudioAttributesUsage.alarm,
+          enableVibration: true,
         ),
-      ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-    );
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentSound: true,
+          sound: '$selectedAdzan.caf',
+        ),
+      );
+    } else {
+      platformDetails = const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'waqt_prayer_v3',
+          'Jadwal Sholat',
+          importance: Importance.max,
+          priority: Priority.high,
+          ticker: 'Waqt General',
+          playSound: true,
+          enableVibration: true,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentSound: true,
+        ),
+      );
+    }
+
+    try {
+      await _notificationsPlugin.zonedSchedule(
+        id: id,
+        title: title,
+        body: body,
+        scheduledDate: tzDate,
+        notificationDetails: platformDetails,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      );
+      debugPrint('NotificationService: Successfully scheduled alarm for ID $id at $tzDate');
+    } catch (e) {
+      debugPrint('NotificationService: Fallback to inexact alarm for ID $id: $e');
+      await _notificationsPlugin.zonedSchedule(
+        id: id,
+        title: title,
+        body: body,
+        scheduledDate: tzDate,
+        notificationDetails: platformDetails,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+    }
   }
 
   Future<void> showQadaAlert(String prayerName) async {
+    final prayerNames = ['Fajr', 'Dzuhur', 'Ashar', 'Maghrib', 'Isha'];
+    int index = prayerNames.indexOf(prayerName);
+    if (index == -1) index = 0;
+
     await showNotification(
-      id: 999,
-      title: 'Sholat Terlewat',
-      body: 'Waktu $prayerName telah habis. Sholat ini telah masuk ke daftar Qada.',
+      id: 1000 + index,
+      title: 'Sholat $prayerName Terlewat',
+      body: 'Waktu $prayerName telah habis. Sholat ini masuk ke daftar Qada.',
     );
   }
 
   Future<void> showStreakResetAlert() async {
     await showNotification(
-      id: 888,
-      title: 'Streak Pecah!',
-      body: 'Streak ketaatan Anda harus terhenti. Yuk, mulai lagi dari awal besok!',
+      id: 9999,
+      title: 'Streak Terhenti',
+      body: 'Sayang sekali, streak Anda terhenti karena ada sholat Qada yang tidak tuntas hari ini.',
     );
+  }
+
+  Future<void> cancelSpecificQadaAlert(String prayerName) async {
+    final prayerNames = ['Fajr', 'Dzuhur', 'Ashar', 'Maghrib', 'Isha'];
+    int index = prayerNames.indexOf(prayerName);
+    if (index != -1) {
+      await _notificationsPlugin.cancel(id: index + 200);
+      debugPrint('NotificationService: Cancelled scheduled Qada alert for $prayerName (ID: ${index + 200})');
+    }
   }
 }

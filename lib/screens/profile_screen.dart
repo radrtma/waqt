@@ -474,8 +474,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildSettingsItem(IconData icon, String title, String subtitle) {
-    return Container(
+  Widget _buildSettingsItem(IconData icon, String title, String subtitle, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -525,6 +527,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           Icon(Icons.chevron_right_rounded, color: Colors.grey[400]),
         ],
+      ),
       ),
     );
   }
