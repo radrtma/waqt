@@ -43,7 +43,9 @@ class NotificationService {
       tz.setLocalLocation(tz.getLocation(dynTimeZoneName.toString()));
       debugPrint('NotificationService: Timezone set to $dynTimeZoneName');
     } catch (e) {
-      debugPrint('NotificationService: Failed to get local timezone, defaulting to Asia/Jakarta');
+      debugPrint(
+        'NotificationService: Failed to get local timezone, defaulting to Asia/Jakarta',
+      );
       tz.setLocalLocation(tz.getLocation('Asia/Jakarta'));
     }
 
@@ -113,12 +115,18 @@ class NotificationService {
     if (defaultTargetPlatform == TargetPlatform.android) {
       debugPrint('NotificationService: Requesting permissions...');
       await Permission.notification.request();
-      
-      final androidPlugin = _notificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
+      final androidPlugin = _notificationsPlugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
       if (androidPlugin != null) {
-        final hasExactAlarm = await androidPlugin.canScheduleExactNotifications() ?? false;
+        final hasExactAlarm =
+            await androidPlugin.canScheduleExactNotifications() ?? false;
         if (!hasExactAlarm) {
-          debugPrint('NotificationService: Requesting exact alarm permission from OS...');
+          debugPrint(
+            'NotificationService: Requesting exact alarm permission from OS...',
+          );
           await androidPlugin.requestExactAlarmsPermission();
         }
       }
@@ -139,7 +147,7 @@ class NotificationService {
     bool useAdzanChannel = false,
   }) async {
     await init();
-    
+
     NotificationDetails platformDetails;
     if (useAdzanChannel) {
       final selectedAdzan = await getSelectedAdzan();
@@ -275,8 +283,8 @@ class NotificationService {
             int.parse(nextParts[1]),
           );
 
-          // Jeda 5 detik agar notifikasi jadwal sholat (yang tepat waktu) muncul duluan
-          var missedAlertTime = nextPrayerTime.add(const Duration(seconds: 5));
+          // Jeda 20 detik agar notifikasi jadwal sholat (yang tepat waktu) muncul duluan
+          var missedAlertTime = nextPrayerTime.add(const Duration(seconds: 20));
           if (missedAlertTime.isBefore(nowTz)) {
             missedAlertTime = missedAlertTime.add(const Duration(days: 1));
           }
@@ -303,15 +311,18 @@ class NotificationService {
     bool isAdzan = false,
   }) async {
     final tzDate = tz.TZDateTime.from(scheduledDate, tz.local);
-    
+
     NotificationDetails platformDetails;
     if (isAdzan) {
       final selectedAdzan = await getSelectedAdzan();
       final channelId = 'waqt_prayer_$selectedAdzan';
-      
+
       // Ensure channel exists
       if (defaultTargetPlatform == TargetPlatform.android) {
-        final androidPlugin = _notificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+        final androidPlugin = _notificationsPlugin
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >();
         await androidPlugin?.createNotificationChannel(
           AndroidNotificationChannel(
             channelId,
@@ -355,10 +366,7 @@ class NotificationService {
           playSound: true,
           enableVibration: true,
         ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentSound: true,
-        ),
+        iOS: DarwinNotificationDetails(presentAlert: true, presentSound: true),
       );
     }
 
@@ -371,9 +379,13 @@ class NotificationService {
         notificationDetails: platformDetails,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       );
-      debugPrint('NotificationService: Successfully scheduled alarm for ID $id at $tzDate');
+      debugPrint(
+        'NotificationService: Successfully scheduled alarm for ID $id at $tzDate',
+      );
     } catch (e) {
-      debugPrint('NotificationService: Fallback to inexact alarm for ID $id: $e');
+      debugPrint(
+        'NotificationService: Fallback to inexact alarm for ID $id: $e',
+      );
       await _notificationsPlugin.zonedSchedule(
         id: id,
         title: title,
@@ -401,7 +413,8 @@ class NotificationService {
     await showNotification(
       id: 9999,
       title: 'Streak Terhenti',
-      body: 'Sayang sekali, streak Anda terhenti karena ada sholat Qada yang tidak tuntas hari ini.',
+      body:
+          'Sayang sekali, streak Anda terhenti karena ada sholat Qada yang tidak tuntas hari ini.',
     );
   }
 
@@ -410,7 +423,9 @@ class NotificationService {
     int index = prayerNames.indexOf(prayerName);
     if (index != -1) {
       await _notificationsPlugin.cancel(id: index + 200);
-      debugPrint('NotificationService: Cancelled scheduled Qada alert for $prayerName (ID: ${index + 200})');
+      debugPrint(
+        'NotificationService: Cancelled scheduled Qada alert for $prayerName (ID: ${index + 200})',
+      );
     }
   }
 }
